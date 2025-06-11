@@ -71,6 +71,7 @@ class OutputSourcePriority(Enum):
     UtilityFirst = '0'  # сеть
     SolarFirst = '1'
     SBU = '2'  # Solar → Battery → Utility
+    SUB = '3'  # Solar → Utility → Battery
     BatteryOnly = '4'
     UtilityOnly = '5'
     SolarAndUtility = '6'

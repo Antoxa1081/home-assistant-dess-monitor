@@ -143,7 +143,7 @@ async def set_inverter_output_priority(token: str, secret: str, device_data, val
             map_param_value = {
                 'Utility': '0',
                 'Solar': '1',
-                'SBU': '2'
+                'SBU': '2',
             }
             param_value = map_param_value[value]
 
@@ -152,7 +152,8 @@ async def set_inverter_output_priority(token: str, secret: str, device_data, val
             map_param_value = {
                 'Utility': '12336',
                 'Solar': '12337',
-                'SBU': '12338'
+                'SBU': '12338',
+                'SUB': '12339',
             }
             param_value = map_param_value[value]
 
@@ -161,7 +162,8 @@ async def set_inverter_output_priority(token: str, secret: str, device_data, val
             map_param_value = {
                 'Utility': '0',
                 'Solar': '1',
-                'SBU': '2'
+                'SBU': '2',
+                'SUB': '3'  
             }
             param_value = map_param_value[value]
 
@@ -183,6 +185,7 @@ async def get_inverter_output_priority(token: str, secret: str, ctrl_fields, dev
         'SBU FIRST': 'SBU',
         'UTI': 'Utility',
         'SUB': 'SUB',
+        'SUB FIRST': 'SUB',
         None: None
     }
 

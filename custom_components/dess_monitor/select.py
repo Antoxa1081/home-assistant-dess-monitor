@@ -108,7 +108,7 @@ class InverterOutputPrioritySelect(SelectBase):
         super().__init__(inverter_device, coordinator)
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_output_priority"
         self._attr_name = f"{self._inverter_device.name} Output Priority"
-        self._attr_options = ['Utility', 'Solar', 'SBU', 'SUB']
+        self._attr_options = ['Utility', 'Solar', 'SBU', 'SUB', 'SUB']
 
         if coordinator.data is not None:
             data = coordinator.data[self._inverter_device.inverter_id]
