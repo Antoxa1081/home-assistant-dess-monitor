@@ -1,9 +1,11 @@
 from datetime import timedelta, datetime
+from typing import Callable, Optional
 
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.const import EntityCategory
+from homeassistant.const import UnitOfElectricPotential
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -45,7 +47,8 @@ async def async_setup_entry(
         )
     for item in hub.items:
         new_devices.extend([
-            BatteryCapacityNumber(item, hass)
+            BatteryCapacityNumber(item, hass),
+            BatteryFullyChargeVoltage(item)
         ])
     if new_devices:
         async_add_entities(new_devices)
@@ -169,8 +172,9 @@ class InverterDynamicSettingNumber(NumberBase):
         # await self.coordinator.async_request_refresh()
 
 
-
 class BatteryCapacityNumber(NumberEntity, RestoreEntity):
+    _attr_entity_category = EntityCategory.CONFIG
+
     def __init__(self, inverter_device, hass):
         self._inverter_device = inverter_device
         self._hass = hass
@@ -205,6 +209,65 @@ class BatteryCapacityNumber(NumberEntity, RestoreEntity):
 
     @property
     def native_value(self):
+        return self._value
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._value = value
+        self.async_write_ha_state()
+
+
+class BatteryFullyChargeVoltage(NumberEntity, RestoreEntity):
+    """
+    NumberEntity, устанавливающая первое значение из корректного варианта
+    select-сущности для параметра зарядного напряжения.
+    """
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, inverter_device):
+        self._inverter_device = inverter_device
+        self._value: Optional[float] = None
+        self._unsubscribe_select: Optional[Callable[[], None]] = None
+        self._select_entity_id: Optional[str] = None
+
+        self._attr_unique_id = (
+            f"{inverter_device.inverter_id}_battery_full_charge_voltage"
+        )
+        self._attr_name = (
+            f"{inverter_device.name} Battery Fully Charge Voltage"
+        )
+
+        self._attr_native_min_value = 0.0
+        self._attr_native_max_value = 100.0
+        self._attr_native_step = 0.1
+        self._attr_mode = NumberMode.BOX
+        self._attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
+        self._attr_icon = "mdi:flash"
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, inverter_device.inverter_id)},
+            name=inverter_device.name,
+            manufacturer="ESS",
+            model=inverter_device.device_data.get("pn"),
+            sw_version=inverter_device.firmware_version,
+            hw_version=inverter_device.device_data.get("devcode"),
+        )
+
+    async def async_added_to_hass(self):
+        """
+        Восстановление предыдущего значения и определение рабочего
+        entity_id select-сущности по возможным вариантам имени.
+        """
+        await super().async_added_to_hass()
+
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in ("unknown", "unavailable"):
+            try:
+                self._value = float(last_state.state)
+            except ValueError:
+                self._value = None
+
+    @property
+    def native_value(self) -> Optional[float]:
         return self._value
 
     async def async_set_native_value(self, value: float) -> None:

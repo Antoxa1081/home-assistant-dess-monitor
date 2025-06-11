@@ -1,15 +1,16 @@
 from datetime import datetime
 
-from homeassistant.components.sensor import RestoreSensor, SensorDeviceClass, SensorStateClass
+from homeassistant.components.sensor import RestoreSensor, SensorDeviceClass, SensorStateClass, SensorEntity
 from homeassistant.const import EntityCategory, UnitOfEnergy, PERCENTAGE
 from homeassistant.core import callback
-from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import slugify
 
 from custom_components.dess_monitor.api.resolvers.data_resolvers import *
 from custom_components.dess_monitor.coordinators.coordinator import MainCoordinator
 from custom_components.dess_monitor.hub import InverterDevice
 from custom_components.dess_monitor.sensors.init_sensors import SensorBase
+from custom_components.dess_monitor.sensors.mixin_sensors import EntityStateSubscriberMixin, VoltageEntityMixin, \
+    SocCalculatorMixin
 
 
 class MyEnergySensor(RestoreSensor, SensorBase):
@@ -99,177 +100,104 @@ class InverterInEnergySensor(FunctionBasedEnergySensor):
                          resolve_grid_in_power)
 
 
-# class TypedSensorBase(SensorBase):
-#     def __init__(
-#             self,
-#             inverter_device: InverterDevice,
-#             coordinator: MainCoordinator,
-#             data_section: str,
-#             data_key: str,
-#             sensor_suffix: str = "",
-#             name_suffix: str = ""
-#     ):
-#         super().__init__(inverter_device, coordinator)
-#         self.data_section = data_section
-#         self.data_key = data_key
-#
-#         suffix = sensor_suffix or data_key
-#         name_part = name_suffix or data_key.replace('_', ' ').title()
-#
-#         self._attr_unique_id = f"{self._inverter_device.inverter_id}_{suffix}"
-#         self._attr_name = f"{self._inverter_device.name} {name_part}"
-#
-#     @callback
-#     def _handle_coordinator_update(self) -> None:
-#         section = self.data.get(self.data_section, {})
-#         raw_value = section.get(self.data_key)
-#
-#         if raw_value is not None:
-#             try:
-#                 self._attr_native_value = float(raw_value)
-#             except (ValueError, TypeError):
-#                 self._attr_native_value = None
-#         else:
-#             self._attr_native_value = None
-#
-#         self.async_write_ha_state()
+class TypedSensorBase(SensorBase):
+    def __init__(
+            self,
+            inverter_device: InverterDevice,
+            coordinator: MainCoordinator,
+            sensor_suffix: str = "",
+            name_suffix: str = ""
+    ):
+        super().__init__(inverter_device, coordinator)
+
+        suffix = sensor_suffix
+        name_part = name_suffix
+
+        self._attr_unique_id = f"{self._inverter_device.inverter_id}_{suffix}"
+        self._attr_name = f"{self._inverter_device.name} {name_part}"
 
 
-# class BatteryStateOfChargeSensor(RestoreSensor, TypedSensorBase):
-#     _attr_device_class = SensorDeviceClass.BATTERY
-#     _attr_native_unit_of_measurement = PERCENTAGE
-#     _attr_suggested_display_precision = 1
-#
-#     def __init__(self, inverter_device, coordinator, hass):
-#         super().__init__(
-#             inverter_device=inverter_device,
-#             coordinator=coordinator,
-#             sensor_suffix="battery_state_of_charge",
-#             name_suffix="Battery State of Charge",
-#         )
-#         self._accumulated_energy_wh = 100.0
-#         self._prev_power = None
-#         self._prev_ts = datetime.now()
-#         self._restored = False
-#         self._hass = hass
-#
-#         device_slug = slugify(self._inverter_device.name)
-#         self._capacity_entity_id = f"number.{device_slug}_vsoc_battery_capacity"
-#         self._battery_capacity_wh = None
-#
-#         async_track_state_change_event(
-#             self._hass,
-#             [self._capacity_entity_id],
-#             self._handle_battery_capacity_change,
-#         )
-#
-#     async def async_added_to_hass(self) -> None:
-#         state = self._hass.states.get(self._capacity_entity_id)
-#         self._update_battery_capacity_from_state(state)
-#
-#         last_data = await self.async_get_last_extra_data()
-#         if last_data is not None:
-#             restored = last_data.as_dict().get("native_value", None)
-#             self._attr_native_value = float(restored) if restored is not None else None
-#         else:
-#             self._attr_native_value = None
-#         self._restored = True
-#         await super().async_added_to_hass()
-#
-#     @property
-#     def available(self) -> bool:
-#         # Доступен только если восстановлен и емкость задана положительно
-#         bulk_voltage = self.get_bulk_charging_voltage()
-#         return super().available and self._restored and (
-#                     self._battery_capacity_wh is not None and self._battery_capacity_wh > 0) and (
-#                     bulk_voltage is not None)
-#
-#     @callback
-#     def _handle_battery_capacity_change(self, event):
-#         state = event.data.get("new_state")
-#         self._update_battery_capacity_from_state(state)
-#
-#     def _update_battery_capacity_from_state(self, state):
-#         if state is None:
-#             self._battery_capacity_wh = None
-#             self._attr_native_value = None
-#             self.async_write_ha_state()
-#             return
-#         try:
-#             value = float(state.state)
-#             if value <= 0:
-#                 self._battery_capacity_wh = None
-#                 self._attr_native_value = None
-#             else:
-#                 self._battery_capacity_wh = value
-#         except (ValueError, TypeError):
-#             self._battery_capacity_wh = None
-#             self._attr_native_value = None
-#         self.async_write_ha_state()
-#
-#     def get_bulk_charging_voltage(self) -> float | None:
-#         try:
-#             voltage = resolve_battery_charging_voltage(self.data)
-#             if voltage > 0:
-#                 return voltage
-#         except (KeyError, ValueError, TypeError):
-#             pass
-#         return None
-#
-#     def update_soc(self, current_power: float, current_voltage: float):
-#         if self._battery_capacity_wh is None or self._battery_capacity_wh <= 0:
-#             # Не считаем, если емкость не задана
-#             self._attr_native_value = None
-#             self.async_write_ha_state()
-#             return
-#
-#         bulk_voltage = self.get_bulk_charging_voltage()
-#         if bulk_voltage is None:
-#             self._attr_native_value = None
-#             self.async_write_ha_state()
-#             return
-#
-#         now = datetime.now()
-#         elapsed_seconds = (now - self._prev_ts).total_seconds()
-#
-#         if self._prev_power is not None:
-#             energy_increment = (elapsed_seconds / 3600) * (self._prev_power + current_power) / 2
-#             self._accumulated_energy_wh += energy_increment
-#
-#         self._prev_power = current_power
-#         self._prev_ts = now
-#
-#         max_capacity = self._battery_capacity_wh
-#
-#         if current_voltage >= bulk_voltage:
-#             soc_percent = 100.0
-#             self._accumulated_energy_wh = max_capacity
-#         else:
-#             if self._accumulated_energy_wh < 0:
-#                 self._accumulated_energy_wh = 0.0
-#             elif self._accumulated_energy_wh > max_capacity:
-#                 self._accumulated_energy_wh = max_capacity
-#
-#             soc_percent = (self._accumulated_energy_wh / max_capacity) * 100
-#
-#         soc_percent = max(0.0, min(100.0, soc_percent))
-#
-#         self._attr_native_value = soc_percent
-#         self.async_write_ha_state()
-#
-#     @callback
-#     def _handle_coordinator_update(self) -> None:
-#         try:
-#             current_voltage = resolve_battery_voltage(self.data, self._inverter_device.device_data)
-#             charging_power = resolve_battery_charging_power(self.data, self._inverter_device.device_data)
-#             discharging_power = resolve_battery_discharge_power(self.data, self._inverter_device.device_data)
-#             power = 0.0
-#             if charging_power > 0:
-#                 power = charging_power
-#             elif discharging_power > 0:
-#                 power = -discharging_power
-#
-#             self.update_soc(power, current_voltage)
-#         except (KeyError, ValueError, TypeError):
-#             self._attr_native_value = None
-#             self.async_write_ha_state()
+class BatteryStateOfChargeSensor(
+    TypedSensorBase,
+    VoltageEntityMixin,
+    EntityStateSubscriberMixin,
+    SocCalculatorMixin,
+    RestoreSensor,
+    SensorEntity,
+):
+    """
+    SOC-сенсор для батареи, используя TypedSensorBase и миксины.
+    """
+    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, inverter_device, coordinator):
+        TypedSensorBase.__init__(
+            self,
+            inverter_device=inverter_device,
+            coordinator=coordinator,
+            sensor_suffix="battery_state_of_charge_ess",
+            name_suffix="Battery State of Charge ESS",
+        )
+        hass = coordinator.hass
+        slug = slugify(inverter_device.name)
+        capacity_entity = f"number.{slug}_vsoc_battery_capacity"
+        full_charge_entity = f"number.{slug}_battery_fully_charge_voltage"
+
+        VoltageEntityMixin.__init__(self, hass, full_charge_entity, "battery_full_charge_voltage")
+        EntityStateSubscriberMixin.__init__(self, hass, capacity_entity, "battery_capacity_wh")
+        SocCalculatorMixin.__init__(self, initial_energy_wh=100.0)
+
+        self._restored = False
+        coordinator.async_add_listener(self._handle_coordinator_update)
+
+    async def async_added_to_hass(self):
+        last = await self.async_get_last_extra_data()
+        if last:
+            restored = last.as_dict().get("native_value")
+            if restored is not None:
+                try:
+                    self._attr_native_value = float(restored)
+                except (ValueError, TypeError):
+                    self._attr_native_value = None
+            else:
+                self._attr_native_value = None
+        self._restored = True
+        await super().async_added_to_hass()
+
+    @property
+    def available(self) -> bool:
+        return (
+                self._restored
+                and self.battery_capacity_wh is not None
+                and self.get_bulk_charging_voltage() is not None
+        )
+
+    def _on_subscribed_value_update(self):
+        if self._attr_native_value is not None:
+            self._handle_coordinator_update()
+
+    @callback
+    def _handle_coordinator_update(self, *_):
+        try:
+            voltage = resolve_battery_voltage(self.data, self._inverter_device.device_data)
+            charge_i = resolve_battery_charging_current(self.data, self._inverter_device.device_data)
+            discharge_i = resolve_battery_discharge_current(self.data, self._inverter_device.device_data)
+            power = charge_i * voltage if charge_i > 0 else -discharge_i * voltage
+
+            cap = self.battery_capacity_wh
+            bulk_v = self.get_bulk_charging_voltage()
+            float_v = self.get_floating_charging_voltage()
+
+            soc = self.calculate_soc(
+                capacity_wh=cap,
+                bulk_v=bulk_v,
+                float_v=float_v,
+                current_power=power,
+                current_voltage=voltage,
+            )
+            self._attr_native_value = round(soc, 1)
+        except Exception:
+            self._attr_native_value = None
+        self.async_write_ha_state()

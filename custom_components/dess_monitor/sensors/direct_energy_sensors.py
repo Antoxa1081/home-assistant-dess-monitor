@@ -281,8 +281,8 @@ class DirectBatteryStateOfChargeSensor(RestoreSensor, DirectTypedSensorBase):
         # Доступен только если восстановлен и емкость задана положительно
         bulk_voltage = self.get_bulk_charging_voltage()
         return super().available and self._restored and (
-                    self._battery_capacity_wh is not None and self._battery_capacity_wh > 0) and (
-                    bulk_voltage is not None)
+                self._battery_capacity_wh is not None and self._battery_capacity_wh > 0) and (
+                bulk_voltage is not None)
 
     @callback
     def _handle_battery_capacity_change(self, event):
@@ -387,3 +387,90 @@ class DirectBatteryStateOfChargeSensor(RestoreSensor, DirectTypedSensorBase):
         except (KeyError, ValueError, TypeError):
             self._attr_native_value = None
             self.async_write_ha_state()
+
+#
+# class DirectBatteryStateOfChargeSensor(
+#     DirectTypedSensorBase,
+#     SectionReaderMixin,
+#     EntityStateSubscriberMixin,
+#     SocCalculatorMixin,
+#     RestoreSensor,
+#     SensorEntity,
+# ):
+#     """
+#     SOC-сенсор, берущий данные из секции qpigs.
+#     """
+#     _attr_device_class = SensorDeviceClass.BATTERY
+#     _attr_native_unit_of_measurement = PERCENTAGE
+#     _attr_suggested_display_precision = 1
+#
+#     def __init__(self, inverter_device, coordinator):
+#         DirectTypedSensorBase.__init__(
+#             self,
+#             inverter_device=inverter_device,
+#             coordinator=coordinator,
+#             data_section="qpigs",
+#             data_key="battery_voltage",
+#             sensor_suffix="battery_state_of_charge",
+#             name_suffix="Battery State of Charge",
+#         )
+#         hass = coordinator.hass
+#         slug = slugify(inverter_device.name)
+#         capacity_entity = f"number.{slug}_vsoc_battery_capacity"
+#
+#         SectionReaderMixin.__init__(self, data_section="qpigs")
+#         EntityStateSubscriberMixin.__init__(self, hass, capacity_entity, "battery_capacity_wh")
+#         SocCalculatorMixin.__init__(self, initial_energy_wh=100.0)
+#
+#         self._restored = False
+#         coordinator.async_add_listener(self._handle_coordinator_update)
+#
+#     async def async_added_to_hass(self):
+#         last = await self.async_get_last_extra_data()
+#         if last:
+#             restored = last.as_dict().get("native_value")
+#             if restored is not None:
+#                 try:
+#                     self._attr_native_value = float(restored)
+#                 except (ValueError, TypeError):
+#                     self._attr_native_value = None
+#             else:
+#                 self._attr_native_value = None
+#         self._restored = True
+#         await super().async_added_to_hass()
+#
+#     @property
+#     def available(self) -> bool:
+#         return (
+#             self._restored
+#             and self.battery_capacity_wh is not None
+#             and self.get_section_float("bulk_charging_voltage") is not None
+#         )
+#
+#     def _on_subscribed_value_update(self):
+#         if self._attr_native_value is not None:
+#             self._handle_coordinator_update()
+#
+#     @callback
+#     def _handle_coordinator_update(self, *_):
+#         volt = self.get_section_float("battery_voltage") or 0
+#         bulk_v = self.get_section_float("bulk_charging_voltage")
+#         float_v = self.get_section_float("float_charging_voltage") or bulk_v
+#         charge_i = self.get_section_float("battery_charging_current") or 0
+#         discharge_i = self.get_section_float("battery_discharge_current") or 0
+#
+#         power = charge_i * volt if charge_i > 0 else -discharge_i * volt
+#
+#         if not all([self.battery_capacity_wh, bulk_v]):
+#             self._attr_native_value = None
+#         else:
+#             soc = self.calculate_soc(
+#                 capacity_wh=self.battery_capacity_wh,
+#                 bulk_v=bulk_v,
+#                 float_v=float_v,
+#                 current_power=power,
+#                 current_voltage=volt,
+#             )
+#             self._attr_native_value = round(soc, 1)
+#
+#         self.async_write_ha_state()

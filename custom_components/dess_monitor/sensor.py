@@ -80,6 +80,7 @@ def create_static_sensors(item, coordinator):
         InverterDCTemperatureSensor,
         InverterInvTemperatureSensor,
         InverterLoadSensor,
+        BatteryStateOfChargeSensor,
 
         # Inverter config sensors
         InverterChargePrioritySensor,
