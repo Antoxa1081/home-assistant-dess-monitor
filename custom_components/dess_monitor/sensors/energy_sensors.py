@@ -117,6 +117,7 @@ class TypedSensorBase(SensorBase):
         self._attr_name = f"{self._inverter_device.name} {name_part}"
 
 
+
 class BatteryStateOfChargeSensor(
     TypedSensorBase,
     VoltageEntityMixin,
@@ -125,9 +126,6 @@ class BatteryStateOfChargeSensor(
     RestoreSensor,
     SensorEntity,
 ):
-    """
-    SOC-сенсор для батареи, используя TypedSensorBase и миксины.
-    """
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 1
@@ -137,8 +135,8 @@ class BatteryStateOfChargeSensor(
             self,
             inverter_device=inverter_device,
             coordinator=coordinator,
-            sensor_suffix="battery_state_of_charge_ess",
-            name_suffix="Battery State of Charge ESS",
+            sensor_suffix="battery_state_of_charge",
+            name_suffix="Battery State of Charge",
         )
         hass = coordinator.hass
         slug = slugify(inverter_device.name)
@@ -147,7 +145,7 @@ class BatteryStateOfChargeSensor(
 
         VoltageEntityMixin.__init__(self, hass, full_charge_entity, "battery_full_charge_voltage")
         EntityStateSubscriberMixin.__init__(self, hass, capacity_entity, "battery_capacity_wh")
-        SocCalculatorMixin.__init__(self, initial_energy_wh=100.0)
+        SocCalculatorMixin.__init__(self)
 
         self._restored = False
         coordinator.async_add_listener(self._handle_coordinator_update)
@@ -156,27 +154,30 @@ class BatteryStateOfChargeSensor(
         last = await self.async_get_last_extra_data()
         if last:
             restored = last.as_dict().get("native_value")
-            if restored is not None:
-                try:
-                    self._attr_native_value = float(restored)
-                except (ValueError, TypeError):
-                    self._attr_native_value = None
-            else:
-                self._attr_native_value = None
+            try:
+                restored = float(restored) if restored is not None else None
+            except (ValueError, TypeError):
+                restored = None
+        else:
+            restored = None
+        if restored is not None and self.battery_capacity_wh:
+            self.reset_accumulator(self.battery_capacity_wh, restored)
+            self._attr_native_value = restored
         self._restored = True
         await super().async_added_to_hass()
+
+    def _on_subscribed_value_update(self):
+        # При изменении ёмкости пересчитываем накопленную энергию
+        if self.battery_capacity_wh is not None and self._attr_native_value is not None:
+            self.reset_accumulator(self.battery_capacity_wh, self._attr_native_value)
 
     @property
     def available(self) -> bool:
         return (
-                self._restored
-                and self.battery_capacity_wh is not None
-                and self.get_bulk_charging_voltage() is not None
+            self._restored
+            and self.battery_capacity_wh is not None
+            and self.get_bulk_charging_voltage() is not None
         )
-
-    def _on_subscribed_value_update(self):
-        if self._attr_native_value is not None:
-            self._handle_coordinator_update()
 
     @callback
     def _handle_coordinator_update(self, *_):

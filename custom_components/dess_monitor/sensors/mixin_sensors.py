@@ -14,10 +14,7 @@ class EntityStateSubscriberMixin:
         self._entity_id = entity_id
         self._subscribed_attr = attr_name
         setattr(self, attr_name, None)
-
-        async_track_state_change_event(
-            hass, [entity_id], self._handle_entity_change
-        )
+        async_track_state_change_event(hass, [entity_id], self._handle_entity_change)
 
     @callback
     def _handle_entity_change(self, event):
@@ -28,9 +25,7 @@ class EntityStateSubscriberMixin:
                 value = None
         except (ValueError, TypeError, AttributeError):
             value = None
-
         setattr(self, self._subscribed_attr, value)
-        # После обновления — переопределяемый хук
         self._on_subscribed_value_update()
 
     def _on_subscribed_value_update(self):
@@ -40,7 +35,7 @@ class EntityStateSubscriberMixin:
 
 class VoltageEntityMixin(EntityStateSubscriberMixin):
     """
-    Миксин для работы с единственным voltage entity, используемым как bulk и float.
+    Миксин для работы с единственным voltage entity как bulk и float.
     """
 
     def get_bulk_charging_voltage(self) -> float | None:
@@ -72,15 +67,28 @@ class SocCalculatorMixin:
     Накопление энергии и расчёт SOC в процентах.
     """
 
-    def __init__(self, initial_energy_wh: float = 0.0):
-        self._accumulated_energy_wh = initial_energy_wh
+    def __init__(self):
+        self._accumulated_energy_wh = 0.0
         self._prev_power = 0.0
-        self._prev_ts = datetime.now(timezone.utc)
+        self._prev_ts = None
+        self._has_prev = False
+
+    def reset_accumulator(self, capacity_wh: float, soc_percent: float):
+        # Инициализация накопленной энергии по SOC
+        self._accumulated_energy_wh = capacity_wh * soc_percent / 100.0
+        now = datetime.now(timezone.utc)
+        self._prev_ts = now
+        self._prev_power = 0.0
+        self._has_prev = True
 
     def _accumulate(self, current_power: float):
         now = datetime.now(timezone.utc)
+        if not self._has_prev:
+            self._prev_ts = now
+            self._prev_power = current_power
+            self._has_prev = True
+            return
         hours = (now - self._prev_ts).total_seconds() / 3600
-        # метод трапеций
         self._accumulated_energy_wh += (self._prev_power + current_power) / 2 * hours
         self._prev_power = current_power
         self._prev_ts = now
@@ -93,18 +101,13 @@ class SocCalculatorMixin:
             current_power: float,
             current_voltage: float,
     ) -> float:
-        # накапливаем
         self._accumulate(current_power)
-
-        # если заряжен до bulk или держит float при маленьком токе
+        # Если заряд на уровне bulk или удерживается float при малом токе
         if current_voltage >= bulk_v or (
                 current_voltage >= float_v and 0 < current_power <= 2 * bulk_v
         ):
             self._accumulated_energy_wh = capacity_wh
-
-        # границы диапазона
         self._accumulated_energy_wh = min(
             max(self._accumulated_energy_wh, 0.0), capacity_wh
         )
-
         return (self._accumulated_energy_wh / capacity_wh) * 100
