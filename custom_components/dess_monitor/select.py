@@ -38,6 +38,7 @@ async def async_setup_entry(
         fields = coordinator_data[item.inverter_id]['ctrl_fields']
         if fields is None:
             continue
+
         # print(config_entry.data)
         if config_entry.options.get('dynamic_settings', False) is True:
             print("Setting up dynamic_settings")
@@ -47,7 +48,16 @@ async def async_setup_entry(
                     filter(lambda field: 'item' in field, fields)
                 )
             )
-            )
+          )
+
+        # async_add_entities(list(
+        #     map(
+        #         lambda field_data: InverterDynamicSettingSelect(item, coordinator, field_data),
+        #         filter(lambda field: 'item' in field, fields)
+        #     )
+        # )
+        # )
+
     if new_devices:
         async_add_entities(new_devices)
 
