@@ -1,0 +1,15 @@
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: "ghcr.io/home-assistant/home-assistant:2025.3.4"
+    volumes:
+      - ha:/config
+      - ./custom_components/dess_monitor:/config/custom_components/dess_monitor
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "8123:8123"
+volumes:
+  ha:

@@ -1,6 +1,5 @@
-import asyncio
 import logging
-from datetime import timedelta, datetime
+from datetime import timedelta
 
 import async_timeout
 from homeassistant.core import HomeAssistant
@@ -8,25 +7,31 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 
-from .api import *
-from .api.helpers import *
+from custom_components.dess_monitor.api import *
+from custom_components.dess_monitor.api.helpers import *
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class MyCoordinator(DataUpdateCoordinator):
-    """My custom coordinator."""
+async def safe_call(coro, default=None):
+    try:
+        return await coro
+    except Exception as e:
+        print(f"Error during {coro}: {e}")
+        return default
+
+
+class MainCoordinator(DataUpdateCoordinator):
     devices = []
     auth = None
     auth_issued_at = None
 
     def __init__(self, hass: HomeAssistant, config_entry):
-        """Initialize my coordinator."""
         super().__init__(
             hass,
             _LOGGER,
             # Name of the data. For logging purposes.
-            name="My sensor",
+            name="Main coordinator",
             config_entry=config_entry,
             # Polling interval. Will only be polled if there are subscribers.
             update_interval=timedelta(seconds=60),
@@ -74,14 +79,19 @@ class MyCoordinator(DataUpdateCoordinator):
 
     async def check_auth(self):
         now = int(datetime.now().timestamp())
-        print(self.auth)
+        # print(self.auth)
         if self.auth_issued_at is None or (now - (self.auth_issued_at + (self.auth['expire'])) <= 3600):
             await self.create_auth()
 
     async def get_active_devices(self):
         devices = await get_devices(self.auth['token'], self.auth['secret'])
         active_devices = [device for device in devices if device['status'] != 1]
-        return active_devices
+        selected_devices = [device for device in active_devices if
+                            str(device['pn']) in self.config_entry.options["devices"] or str(device['uid']) in
+                            self.config_entry.options["devices"]] if (
+                "devices" in self.config_entry.options and len(
+            self.config_entry.options["devices"]) > 0) else active_devices
+        return selected_devices
 
     async def _async_update_data(self):
         """Fetch data from API endpoint.
@@ -90,13 +100,7 @@ class MyCoordinator(DataUpdateCoordinator):
         so entities can quickly look up their data.
         """
         try:
-            # Note: asyncio.TimeoutError and aiohttp.ClientError are already
-            # handled by the data update coordinator.
             async with async_timeout.timeout(120):
-                # Grab active context variables to limit data required to be fetched from API
-                # Note: using context is not required if there is no need or ability to limit
-                # data retrieved from API.
-                # listening_idx = set(self.async_contexts())
                 print('coordinator update data devices')
 
                 await self.check_auth()
@@ -105,43 +109,38 @@ class MyCoordinator(DataUpdateCoordinator):
                 token = self.auth['token']
                 secret = self.auth['secret']
 
-                last_data_tasks = [get_device_last_data(token, secret, device) for device in self.devices]
-                last_results = await asyncio.gather(*last_data_tasks)
+                async def build_device_data(device):
+                    pn = device['pn']
+                    last_data = await safe_call(get_device_last_data(token, secret, device), default={})
+                    energy_flow = await safe_call(get_device_energy_flow(token, secret, device), default={})
+                    pars = await safe_call(get_device_pars(token, secret, device), default={})
+                    ctrl_fields = await safe_call(get_device_ctrl_fields(token, secret, device), default={'field': []})
+                    output_priority = await safe_call(get_inverter_output_priority(token, secret, ctrl_fields, device), default={})
 
-                web_query_device_energy_flow_es = [get_device_energy_flow(token, secret, device) for device in
-                                                   self.devices]
-                web_query_device_energy_flow_es_results = await asyncio.gather(*web_query_device_energy_flow_es)
-
-                query_device_pars_es = [get_device_pars(token, secret, device) for device in self.devices]
-                query_device_pars_es_results = await asyncio.gather(*query_device_pars_es)
-
-                query_device_ctrl_fields = [get_device_ctrl_fields(token, secret, device) for device in
-                                            self.devices]
-                query_device_ctrl_fields_results = await asyncio.gather(*query_device_ctrl_fields)
-
-                query_device_output_priority = [get_inverter_output_priority(token, secret, device) for device in
-                                                self.devices]
-                query_device_output_priority_results = await asyncio.gather(*query_device_output_priority)
-
-                data_map = {}
-                for i, device in enumerate(self.devices):
-                    data_map[device['pn']] = {
-                        'last_data': last_results[i],
-                        'energy_flow': web_query_device_energy_flow_es_results[i],
-                        'pars': query_device_pars_es_results[i],
-                        'device': self.devices[i],
-                        'ctrl_fields': query_device_ctrl_fields_results[i]['field'],
+                    return pn, {
+                        'last_data': last_data,
+                        'energy_flow': energy_flow,
+                        'pars': pars,
+                        'device': device,
+                        'ctrl_fields': ctrl_fields.get('field', []),
                         'device_extra': {
-                            'output_priority': query_device_output_priority_results[i]
+                            'output_priority': output_priority,
                         }
                     }
+
+                tasks = [build_device_data(device) for device in self.devices]
+
+                device_data = await asyncio.gather(*tasks)
+
+                data_map = {pn: data for pn, data in device_data}
+
                 return data_map
                 # return
         except TimeoutError as err:
             # Raising ConfigEntryAuthFailed will cancel future updates
             # and start a config flow with SOURCE_REAUTH (async_step_reauth)
             raise err
-        except Exception as e:
+        except AuthInvalidateError:
             await self.create_auth()
             # raise ConfigEntryAuthFailed from err
         # except ApiError as err:

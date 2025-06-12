@@ -3,25 +3,20 @@ import hashlib
 import time
 import urllib
 from datetime import datetime
-from enum import StrEnum
 
 import aiohttp
 
-
-class DeviceParameterName(StrEnum):
-    BATTERY_VOLTAGE = 'Battery Voltage'
-    SOUTH = 'south'
-
+DOMAIN_BASE_URL = 'web.shinemonitor.com'
 
 headers = {
-    'Host': 'web.dessmonitor.com',
-    'Origin': 'web.dessmonitor.com',
+    'Host': DOMAIN_BASE_URL,
+    'Origin': DOMAIN_BASE_URL,
     'Referer': 'https://www.dessmonitor.com/',
     'DNT': '1',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
 }
 
-api_semaphore = asyncio.Semaphore(3)
+api_semaphore = asyncio.Semaphore(10)
 
 
 async def auth_user(username: str, password_hash: str):
@@ -41,7 +36,7 @@ async def auth_user(username: str, password_hash: str):
             'salt': salt,
             **params,
         }
-        url = f'https://web.dessmonitor.com/public/?{urllib.parse.urlencode(payload, doseq=False, safe="@")}'
+        url = f'https://{DOMAIN_BASE_URL}/public/?{urllib.parse.urlencode(payload, doseq=False, safe="@")}'
         response = (await (await session.get(url, headers=headers)).json())
         if response['err'] != 0:
             print(f'Error {response["err"]} while authenticating user: {response["desc"]}')
@@ -79,17 +74,23 @@ async def create_auth_api_request(token, secret, params, raise_error=True):
             payload = generate_params_signature(token, secret, params)
             # print(payload)
             params_path = urllib.parse.urlencode(payload, doseq=False, safe="@")
-            url = f'https://web.dessmonitor.com/public/?{params_path}'
+            url = f'https://{DOMAIN_BASE_URL}/public/?{params_path}'
             json = (await (await session.get(url, headers=headers)).json())
             if json['err'] == 0:
                 return json['dat']
             else:
                 if raise_error:
+                    if json['err'] == 10:
+                        raise AuthInvalidateError
                     raise Exception(
                         f'Error {json["err"]} while creating auth api request: {json["desc"]}'
                     )
                 else:
                     return json
+
+
+class AuthInvalidateError(Exception):
+    pass
 
 
 async def create_auth_api_remote_request(token, secret, params, raise_error=True):
@@ -98,7 +99,7 @@ async def create_auth_api_remote_request(token, secret, params, raise_error=True
             payload = generate_params_signature(token, secret, params)
             # print(payload)
             params_path = urllib.parse.urlencode(payload, doseq=False, safe="@")
-            url = f'https://web.dessmonitor.com/remote/?{params_path}'
+            url = f'https://{DOMAIN_BASE_URL}/remote/?{params_path}'
             json = (await (await session.get(url, headers=headers)).json())
             if json['err'] == 0:
                 return json['dat']
@@ -182,9 +183,9 @@ async def get_device_ctrl_value(token: str, secret: str, device_identity, param_
         **extract_device_identity(device_identity),
     }
     start = int(datetime.now().timestamp() * 1000)
-    print(payload)
+    # print(payload)
     response = await create_auth_api_request(token, secret, payload, False)
-    print('get_device_ctrl_value time', int(datetime.now().timestamp() * 1000) - start)
+    # print('get_device_ctrl_value time', int(datetime.now().timestamp() * 1000) - start)
     return response
 
 
@@ -245,10 +246,23 @@ async def set_ctrl_device_param(token: str, secret: str, device_identity, param_
     payload = {
         'action': 'ctrlDevice',
         'i18n': 'en_US',
+        'source': '1',
         'id': param_id,
         'val': value,
         **extract_device_identity(device_identity),
     }
-    response = await create_auth_api_remote_request(token, secret, payload)
+    response = await create_auth_api_request(token, secret, payload)
+
+    return response
+
+
+async def send_device_direct_command(token: str, secret: str, device_identity, cmd: str):
+    payload = {
+        'action': 'sendCmdToDevice',
+        'source': '1',
+        'cmd': cmd,
+        **extract_device_identity(device_identity),
+    }
+    response = await create_auth_api_request(token, secret, payload)
 
     return response

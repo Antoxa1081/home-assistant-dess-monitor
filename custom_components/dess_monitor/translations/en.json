@@ -12,7 +12,28 @@
       "user": {
         "data": {
           "password": "Password",
-          "username": "Login"
+          "username": "Login",
+          "dynamic_settings": "Device settings (allow to read & set equipment settings)",
+          "raw_sensors": "Device raw sensors (provide all available by wifi plug sensor fields)",
+          "direct_request_protocol": "Direct data request protocol beta (provide near-realtime direct data reading from equipment, excluding non Axpert devices like Anenji etc.)"
+        }
+      },
+      "select_devices": {
+        "data": {
+          "devices": "Select required devices"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Update hub parameters",
+        "data": {
+          "devices": "Available devices",
+          "dynamic_settings": "Device settings (allow to read & set equipment settings)",
+          "raw_sensors": "Device raw sensors (provide all available by wifi plug sensor fields)",
+          "direct_request_protocol": "Direct data request protocol beta (provide near-realtime direct data reading from equipment, excluding non Axpert devices like Anenji etc.)"
         }
       }
     }

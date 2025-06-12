@@ -1,255 +1,140 @@
-from custom_components.dess_monitor.api import set_ctrl_device_param, get_device_ctrl_value
+from typing import Any, Dict, Optional
+
+from custom_components.dess_monitor.api import set_ctrl_device_param, get_device_ctrl_value, send_device_direct_command
+from custom_components.dess_monitor.api.commands.direct_commands import decode_direct_response, get_command_hex
+from custom_components.dess_monitor.api.resolvers.data_keys_map import SENSOR_KEYS_MAP
 
 
-def resolve_battery_charging_current(data, device_data):
-    match device_data['devcode']:
-        case 2376:
-            result = next((x for x in data['last_data']['pars']['bt_'] if
-                           x['id'].lower() == 'bt_eybond_read_29'.lower()), None)
-            if result is None:
-                return None
-            value = float(result['val'])
-            if value >= 0:
-                return value
-            else:
-                return 0
-        case _:
-            return \
-                float(next(
-                    (x for x in data['last_data']['pars']['bt_']
-                     if
-                     x['id'] == 'bt_battery_charging_current' or x[
-                         'par'].lower() == 'Battery charging current'.lower()),
-                    {'val': '0'}
-                )['val'])
+def resolve_param(data, where, case_insensitive=False, find_all=False, default=None, root_keys=None):
+    """
+    Recursively searches for elements in a nested structure that satisfy 'where'.
 
+    Args:
+      data: The input data (dict, list, etc.).
+      where: A dict of conditions (AND mode) or a list of dicts (OR mode).
+      case_insensitive: Compare strings in lower-case if True.
+      find_all: Return all matching elements if True; otherwise, first match.
+      default: Value to return if no match is found.
+      root_keys: List of keys at root to start the search; if None, search full structure.
 
-def resolve_battery_charging_voltage(data, device_data):
-    match device_data['devcode']:
-        case _:
-            return \
-                float(next((x for x in
-                            data['last_data']['pars']['bt_']
-                            if
-                            x['id'] == 'bt_vulk_charging_voltage'), {'val': '0'})['val'])
+    Returns:
+      A matching element (or list of elements) or default if not found.
+    """
+    found = []
 
+    def _matches_conditions(item):
+        # OR mode if where is a list; AND mode if dict.
+        if isinstance(where, list):
+            for condition in where:
+                if not isinstance(condition, dict):
+                    continue
+                match = True
+                for key, value in condition.items():
+                    if key not in item:
+                        match = False
+                        break
+                    item_val = item[key]
+                    if case_insensitive and isinstance(item_val, str) and isinstance(value, str):
+                        if item_val.lower() != value.lower():
+                            match = False
+                            break
+                    else:
+                        if item_val != value:
+                            match = False
+                            break
+                if match:
+                    return True
+            return False
+        elif isinstance(where, dict):
+            for key, value in where.items():
+                if key not in item:
+                    return False
+                item_val = item[key]
+                if case_insensitive and isinstance(item_val, str) and isinstance(value, str):
+                    if item_val.lower() != value.lower():
+                        return False
+                else:
+                    if item_val != value:
+                        return False
+            return True
+        return False
 
-def resolve_battery_discharge_current(data, device_data):
-    match device_data['devcode']:
-        case 2376:
-            result = next((x for x in data['last_data']['pars']['bt_'] if
-                           x['id'].lower() == 'bt_eybond_read_29'.lower()), None)
-            if result is None:
-                return None
-            value = float(result['val'])
-            if value <= 0:
-                return abs(value)
-            else:
-                return 0
-        case _:
-            return \
-                float(next(
-                    (x for x in data['last_data']['pars']['bt_']
-                     if
-                     x['id'] == 'bt_battery_discharge_current'),
-                    {'val': '0'}
-                )['val'])
+    def _search(current):
+        nonlocal found
+        if isinstance(current, dict):
+            if _matches_conditions(current):
+                found.append(current)
+                if not find_all:
+                    return True
+            for v in current.values():
+                if isinstance(v, (dict, list)):
+                    if _search(v) and not find_all:
+                        return True
+        elif isinstance(current, list):
+            for item in current:
+                if isinstance(item, (dict, list)):
+                    if _search(item) and not find_all:
+                        return True
+        return False
 
-
-def resolve_battery_voltage(data, device_data):
-    match device_data['devcode']:
-        case _:
-            return \
-                float(next((x for x in
-                            data['last_data']['pars']['bt_']
-                            if
-                            x['id'] == 'bt_battery_voltage' or x['par'].lower() == 'Battery Voltage'.lower()),
-                           {'val': '0'})['val'])
-
-
-def resolve_battery_charging_power(data, device_data):
-    match device_data['devcode']:
-        case 2376:
-            result = next((x for x in data['energy_flow']['bt_status'] if x['par'].lower() == 'battery_active_power'),
-                          None)
-            if result is None:
-                return None
-            value = float(result['val']) * 1000
-            if value >= 0:
-                return value
-            else:
-                return 0
-        case _:
-            return resolve_battery_charging_current(data, device_data) * \
-                resolve_battery_charging_voltage(data, device_data)
-
-
-def resolve_battery_discharge_power(data, device_data):
-    match device_data['devcode']:
-        case 2376:
-            result = next((x for x in data['energy_flow']['bt_status'] if x['par'].lower() == 'battery_active_power'),
-                          None)
-            if result is None:
-                return None
-            value = float(result['val']) * 1000
-            if value <= 0:
-                return abs(value)
-            else:
-                return 0
-        case _:
-            return resolve_battery_discharge_current(data, device_data) * \
-                resolve_battery_voltage(data, device_data)
-
-
-def resolve_active_load_power(data, device_data):
-    match device_data['devcode']:
-        case _:
-            return (float(
-                next((x for x in data['energy_flow']['bc_status'] if
-                      x['par'] == 'load_active_power'), {'val': '0'})['val']) * 1000)
-
-
-def resolve_active_load_percentage(data, device_data):
-    match device_data['devcode']:
-        case 2376:
-            return float(
-                next((x for x in data['last_data']['pars']['bc_'] if
-                      x['id'].lower() == 'bc_eybond_read_37'), {'val': '0'})['val'])
-        case 2341:
-            return float(
-                next((x for x in data['last_data']['pars']['bc_'] if
-                      x['id'].lower() == 'bc_battery_capacity'), {'val': '0'})['val'])
-        case 2428:
-            return float(
-                next((x for x in data['last_data']['pars']['bc_'] if
-                      x['id'].lower() == 'bc_load_percent'), {'val': '0'})['val'])
-        case _:
-            return None
-
-
-def resolve_output_priority(data, device_data):
-    mapper = {
-        'uti': 'Utility',
-        'utility': 'Utility',
-        'sbu': 'SBU',
-        'sol': 'Solar',
-        'solar': 'Solar',
-        'solar first': 'Solar',
-        'sbu first': 'SBU',
-        'utility first': 'Utility',
-        None: None
-    }
-    match device_data['devcode']:
-        case 2341:
-            val = next((x for x in data['last_data']['pars']['bc_'] if x['id'] == 'bc_output_source_priority'), {'val': None})['val']
-
-        case 2376:
-            if 'sy_' not in data['last_data']['pars']:
-                return None
-            val = next((x for x in data['last_data']['pars']['sy_'] if
-                        x['par'].lower() == 'Output priority'.lower()), {'val': None})['val']
-
-        case _:
-            if 'device_extra' in data:
-                return data['device_extra']['output_priority']
-            else:
-                return None
-
-    if val is not None and val.lower() in mapper:
-        return mapper[val.lower()]
+    if root_keys is not None and isinstance(data, dict):
+        for key in root_keys:
+            if key in data:
+                _search(data[key])
     else:
-        return None
+        _search(data)
+
+    if find_all:
+        return found if found else default
+    else:
+        return found[0] if found else default
 
 
-def resolve_charge_priority(data, device_data):
-    mapper = {
-        'Solar priority': 'SOLAR_PRIORITY',
-        'Solar and mains': 'SOLAR_AND_UTILITY',
-        'Solar only': 'SOLAR_ONLY',
-        None: None,
-    }
-    match device_data['devcode']:
-        case _:
-            return \
-                mapper[
-                    next(
-                        (x for x in data['last_data']['pars']['bt_']
-                         if
-                         x['id'] == 'bt_charger_source_priority'), {'val': None})['val']]
+def safe_float(val: Optional[str], default: float = 0.0) -> float:
+    try:
+        return float(val) if val is not None else default
+    except (ValueError, TypeError):
+        return default
 
 
-def resolve_grid_in_power(data, device_data):
-    match device_data['devcode']:
-        case _:
-            return float(next((x for x in data['last_data']['pars']['gd_'] if
-                               x['id'] == 'gd_grid_active_power'), {'val': '0'})['val'])
+def get_sensor_value_simple(
+        name: str,
+        data: Dict[str, Any],
+        device_data: Dict[str, Any]
+) -> Optional[str]:
+    keys = SENSOR_KEYS_MAP.get(name, [])
+
+    for key in keys:
+        res = resolve_param(data, {"id": key}, case_insensitive=True)
+        if res:
+            return res.get("val")
+        res = resolve_param(data, {"par": key}, case_insensitive=True)
+        if res:
+            if res.get("status") != 0:
+                return res.get("val")
+    return None
 
 
-def resolve_grid_frequency(data, device_data):
-    match device_data['devcode']:
-        case _:
-            return next((x for x in data['last_data']['pars']['gd_'] if
-                         x['id'] == 'gd_grid_frequency' or
-                         x['id'] == 'gd_ac_input_frequency' or
-                         x['par'].lower() == 'Grid frequency'.lower()
-                         ), {'val': None})['val']
-
-
-def resolve_pv_power(data, device_data):
-    match device_data['devcode']:
-        case _:
-            return float(next((x for x in data['last_data']['pars']['pv_'] if
-                               x['id'] == 'pv_output_power'), {'val': '0'})['val'])
-
-
-def resolve_pv_voltage(data, device_data):
-    match device_data['devcode']:
-        case _:
-            return next((x for x in data['last_data']['pars']['pv_'] if
-                         x['id'] == 'pv_input_voltage' or x['id'] == 'pv_voltage' or x[
-                             'par'].lower() == 'PV Voltage'.lower() or x[
-                             'par'].lower() == 'PV Input Voltage'.lower()), {'val': None})['val']
-
-
-def resolve_grid_input_voltage(data, device_data):
-    match device_data['devcode']:
-        case _:
-            return next((x for x in data['last_data']['pars']['gd_'] if
-                         x['id'] == 'gd_ac_input_voltage' or x['id'] == 'gd_grid_voltage' or x[
-                             'par'].lower() == 'Grid Voltage'.lower()),
-                        {'val': None})['val']
-
-
-def resolve_grid_output_voltage(data, device_data):
-    match device_data['devcode']:
-        case _:
-            return next((x for x in data['last_data']['pars']['bc_'] if
-                         x['id'] == 'bc_output_voltage' or x['par'].lower() == 'Output Voltage'.lower()),
-                        {'val': None})['val']
-
-
-def resolve_dc_module_temperature(data, device_data):
-    match device_data['devcode']:
-        case _:
-            data = data['last_data']['pars']
-            if 'sy_' not in data:
+def get_sensor_value_simple_entry(
+        name: str,
+        data: Dict[str, Any],
+        device_data: Dict[str, Any]
+) -> tuple[str, Any, Any] | None:
+    """
+    Ищет значение сенсора по ключам из SENSOR_KEYS_MAP[name].
+    Возвращает кортеж (имя_поля, значение), где имя_поля — "id" или "par".
+    """
+    keys = SENSOR_KEYS_MAP.get(name, [])
+    for key in keys:
+        res = resolve_param(data, {"id": key}, case_insensitive=True)
+        if res:
+            return res.get("id"), res.get("val"), res.get("unit", None)
+        res = resolve_param(data, {"par": key}, case_insensitive=True)
+        if res:
+            if res.get("status") == 0:
                 return None
-            else:
-                return \
-                    next((x for x in data['sy_'] if x['par'].lower() == 'DC Module Termperature'.lower()),
-                         {'val': None})['val']
-
-
-def resolve_inv_temperature(data, device_data):
-    match device_data['devcode']:
-        case _:
-            data = data['last_data']['pars']
-            if 'sy_' not in data:
-                return None
-            else:
-                return \
-                    next((x for x in data['sy_'] if x['par'].lower() == 'INV Module Termperature'.lower()),
-                         {'val': None})['val']
+            return res.get("par"), res.get("val"), res.get("unit", None)
+    return None
 
 
 async def set_inverter_output_priority(token: str, secret: str, device_data, value: str):
@@ -258,7 +143,7 @@ async def set_inverter_output_priority(token: str, secret: str, device_data, val
             map_param_value = {
                 'Utility': '0',
                 'Solar': '1',
-                'SBU': '2'
+                'SBU': '2',
             }
             param_value = map_param_value[value]
 
@@ -267,7 +152,8 @@ async def set_inverter_output_priority(token: str, secret: str, device_data, val
             map_param_value = {
                 'Utility': '12336',
                 'Solar': '12337',
-                'SBU': '12338'
+                'SBU': '12338',
+                'SUB': '12339',
             }
             param_value = map_param_value[value]
 
@@ -276,7 +162,8 @@ async def set_inverter_output_priority(token: str, secret: str, device_data, val
             map_param_value = {
                 'Utility': '0',
                 'Solar': '1',
-                'SBU': '2'
+                'SBU': '2',
+                'SUB': '3'  
             }
             param_value = map_param_value[value]
 
@@ -287,33 +174,32 @@ async def set_inverter_output_priority(token: str, secret: str, device_data, val
     return await set_ctrl_device_param(token, secret, device_data, param_id, param_value)
 
 
-async def get_inverter_output_priority(token: str, secret: str, device_data):
-    match device_data['devcode']:
-        case 2341:
-            map_param_value = {
-                'Utility first': 'Utility',
-                'Solar first': 'Solar',
-                'SBU': 'SBU',
-                'SBU first': 'SBU',
-                None: None
-            }
-            # param_value = map_param_value[value]
+async def get_inverter_output_priority(token: str, secret: str, ctrl_fields, device_data):
+    map_param_value = {
+        'UTILITY FIRST': 'Utility',
+        'UTILITY': 'Utility',
+        'SOLAR FIRST': 'Solar',
+        'SOLAR': 'Solar',
+        'SOL': 'Solar',
+        'SBU': 'SBU',
+        'SBU FIRST': 'SBU',
+        'UTI': 'Utility',
+        'SUB': 'SUB',
+        'SUB FIRST': 'SUB',
+        None: None
+    }
 
-            param_id = 'los_output_source_priority'
-        case 2428:
-            map_param_value = {
-                'Utility first': 'Utility',
-                'Solar first': 'Solar',
-                'SBU': 'SBU',
-                'SBU first': 'SBU',
-                None: None
-            }
-            # param_value = map_param_value[value]
+    entry = get_sensor_value_simple_entry('output_priority_option', ctrl_fields, device_data)
 
-            param_id = 'bse_output_source_priority'
-
-        case _:
-            return
+    if entry is None:
+        return None
+    param_id, _, _ = entry
     result = await get_device_ctrl_value(token, secret, device_data, param_id)
+    if result['val'].upper() not in map_param_value:
+        return None
+    return map_param_value[result['val'].upper()]
 
-    return map_param_value[result['val']]
+
+async def get_direct_data(token: str, secret: str, device_data, cmd_name):
+    result = await send_device_direct_command(token, secret, device_data, get_command_hex(cmd_name))
+    return decode_direct_response(cmd_name, result['dat'])

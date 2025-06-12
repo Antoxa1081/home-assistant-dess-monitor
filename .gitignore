@@ -1,2 +1,5 @@
 .venv
 .idea
+config
+docker-compose.yml
+tests/test-api.py

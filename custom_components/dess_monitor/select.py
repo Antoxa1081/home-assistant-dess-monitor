@@ -5,12 +5,12 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from custom_components.dess_monitor import MyCoordinator, HubConfigEntry
+from custom_components.dess_monitor import MainCoordinator, HubConfigEntry
 from custom_components.dess_monitor.api import set_ctrl_device_param, get_device_ctrl_value
-from custom_components.dess_monitor.api.helpers import resolve_output_priority, set_inverter_output_priority
+from custom_components.dess_monitor.api.helpers import set_inverter_output_priority
+from custom_components.dess_monitor.api.resolvers.data_resolvers import resolve_output_priority
 from custom_components.dess_monitor.const import DOMAIN
 from custom_components.dess_monitor.hub import InverterDevice
 from custom_components.dess_monitor.util import resolve_number_with_unit
@@ -38,6 +38,18 @@ async def async_setup_entry(
         fields = coordinator_data[item.inverter_id]['ctrl_fields']
         if fields is None:
             continue
+
+        # print(config_entry.data)
+        if config_entry.options.get('dynamic_settings', False) is True:
+            print("Setting up dynamic_settings")
+            async_add_entities(list(
+                map(
+                    lambda field_data: InverterDynamicSettingSelect(item, coordinator, field_data),
+                    filter(lambda field: 'item' in field, fields)
+                )
+            )
+          )
+
         # async_add_entities(list(
         #     map(
         #         lambda field_data: InverterDynamicSettingSelect(item, coordinator, field_data),
@@ -45,6 +57,7 @@ async def async_setup_entry(
         #     )
         # )
         # )
+
     if new_devices:
         async_add_entities(new_devices)
 
@@ -52,7 +65,7 @@ async def async_setup_entry(
 class SelectBase(CoordinatorEntity, SelectEntity):
     # should_poll = True
 
-    def __init__(self, inverter_device: InverterDevice, coordinator: MyCoordinator):
+    def __init__(self, inverter_device: InverterDevice, coordinator: MainCoordinator):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._inverter_device = inverter_device
@@ -101,11 +114,11 @@ class SelectBase(CoordinatorEntity, SelectEntity):
 class InverterOutputPrioritySelect(SelectBase):
     _attr_current_option = None
 
-    def __init__(self, inverter_device: InverterDevice, coordinator: MyCoordinator):
+    def __init__(self, inverter_device: InverterDevice, coordinator: MainCoordinator):
         super().__init__(inverter_device, coordinator)
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_output_priority"
         self._attr_name = f"{self._inverter_device.name} Output Priority"
-        self._attr_options = ['Utility', 'Solar', 'SBU']
+        self._attr_options = ['Utility', 'Solar', 'SBU', 'SUB', 'SUB']
 
         if coordinator.data is not None:
             data = coordinator.data[self._inverter_device.inverter_id]
@@ -139,7 +152,7 @@ class InverterDynamicSettingSelect(SelectBase):
     should_poll = True
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, inverter_device: InverterDevice, coordinator: MyCoordinator, field_data):
+    def __init__(self, inverter_device: InverterDevice, coordinator: MainCoordinator, field_data):
         super().__init__(inverter_device, coordinator)
         self._field_data = field_data
         self._service_param_id = field_data['id']
@@ -195,7 +208,7 @@ class InverterDynamicSettingSelect(SelectBase):
             else:
                 if self._last_updated is None:
                     self._disabled_param = True
-                print('get_device_ctrl_value', self._inverter_device.name, self._service_param_id, response)
+                # print('get_device_ctrl_value', self._inverter_device.name, self._service_param_id, response)
 
     @property
     def available(self) -> bool:
