@@ -354,7 +354,7 @@ class DirectBatteryStateOfChargeSensor(RestoreSensor, DirectTypedSensorBase):
         max_capacity = self._battery_capacity_wh
 
         if current_voltage >= bulk_voltage or (
-                current_voltage >= floating_voltage and 0 < current_power <= 2 * bulk_voltage):
+                current_voltage >= floating_voltage and 0 <= current_power <= 2 * bulk_voltage):
             soc_percent = 100.0
             self._accumulated_energy_wh = max_capacity
         else:
