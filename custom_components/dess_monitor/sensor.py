@@ -34,6 +34,7 @@ async def async_setup_entry(
                 DirectPVEnergySensor(item, hub.direct_coordinator),
                 DirectPV2EnergySensor(item, hub.direct_coordinator),
                 DirectInverterOutputEnergySensor(item, hub.direct_coordinator),
+                DirectInverterGridInputEnergySensor(item, hub.direct_coordinator),
                 DirectBatteryInEnergySensor(item, hub.direct_coordinator),
                 DirectBatteryOutEnergySensor(item, hub.direct_coordinator),
                 DirectBatteryStateOfChargeSensor(item, hub.direct_coordinator, hass),

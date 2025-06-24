@@ -6,6 +6,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import slugify
 
+from custom_components.dess_monitor.api.commands.direct_commands import resolve_grid_input_power
 from custom_components.dess_monitor.sensors.direct_sensor import DirectTypedSensorBase
 
 
@@ -150,19 +151,31 @@ class DirectInverterOutputEnergySensor(DirectEnergySensorBase):
         )
 
 
-class DirectOutputApparentEnergySensor(DirectEnergySensorBase):
-    """Энергия по кажущейся мощности (qpigs['output_apparent_power'])."""
+class DirectInverterGridInputEnergySensor(DirectEnergySensorBase):
 
     def __init__(self, inverter_device, coordinator):
         super().__init__(
             inverter_device=inverter_device,
             coordinator=coordinator,
             data_section="qpigs",
-            data_key="output_apparent_power",
-            sensor_suffix="direct_output_apparent_power_energy",
-            name_suffix="Apparent Power Energy",
+            data_key="input_active_power",
+            sensor_suffix="direct_inverter_grid_input_power_energy",
+            name_suffix="Inverter Grid Input Power Energy",
         )
 
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        try:
+            qpigs = self.data.get("qpigs", {})
+            qpiri = self.data.get("qpiri", {})
+            power = resolve_grid_input_power(qpigs, qpiri)
+        except (KeyError, ValueError, TypeError):
+            power = None
+
+        if power is not None:
+            self.update_energy_value(power)
+
+        self.async_write_ha_state()
 
 class DirectBatteryInEnergySensor(DirectEnergySensorBase):
     """Энергия по мощности зарядки батареи (battery_charging_current * battery_voltage)."""

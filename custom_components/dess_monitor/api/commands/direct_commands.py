@@ -197,6 +197,26 @@ def decode_qbeqi(ascii_str):
     ]
     return dict(zip(fields, values))
 
+def resolve_grid_input_power(qpigs: dict, qpiri: dict) -> float:
+    try:
+        status_bits = qpigs["device_status_bits_b7_b0"]
+        output_power = float(qpigs["output_active_power"])
+        charge_current = float(qpigs["battery_charging_current"])
+        bulk_voltage = float(qpiri["bulk_charging_voltage"])
+    except (KeyError, ValueError):
+        return 0.0
+
+    # B2 = line mode, B1 = bypass mode (нумерация: B7 слева, B0 справа)
+    is_line_mode = status_bits[5] == '1'
+    is_bypass_mode = status_bits[6] == '1'
+    is_grid_mode = is_line_mode or is_bypass_mode
+
+    if not is_grid_mode:
+        return 0.0
+
+    battery_charge_power = charge_current * bulk_voltage
+    return output_power + battery_charge_power
+
 
 # Тестовый универсальный декодер
 def decode_direct_response(command: str, hex_input: str) -> dict:

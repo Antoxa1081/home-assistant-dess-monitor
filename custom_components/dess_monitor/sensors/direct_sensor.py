@@ -7,7 +7,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.dess_monitor import DirectCoordinator
 from custom_components.dess_monitor.api.commands.direct_commands import ParallelMode, ChargerSourcePriority, \
-    OutputSourcePriority, ACInputVoltageRange, BatteryType
+    OutputSourcePriority, ACInputVoltageRange, BatteryType, resolve_grid_input_power
 from custom_components.dess_monitor.const import DOMAIN
 from custom_components.dess_monitor.hub import InverterDevice
 
@@ -281,6 +281,34 @@ class DirectInverterOutputPowerSensor(DirectWattSensorBase):
         )
 
 
+class DirectInverterGridInputPowerSensor(DirectWattSensorBase):
+    def __init__(self, inverter_device: InverterDevice, coordinator: DirectCoordinator):
+        super().__init__(
+            inverter_device,
+            coordinator,
+            data_section="qpigs",
+            data_key="input_active_power",
+            sensor_suffix="inverter_grid_input_power",
+            name_suffix="Inverter Grid Input Power"
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        qpigs = self.data.get('qpigs', {})
+        qpiri = self.data.get('qpiri', {})
+        raw_value = resolve_grid_input_power(qpigs, qpiri)
+
+        if raw_value is not None:
+            try:
+                self._attr_native_value = float(raw_value)
+            except (ValueError, TypeError):
+                self._attr_native_value = None
+        else:
+            self._attr_native_value = None
+
+        self.async_write_ha_state()
+
+
 class DirectInverterTemperatureSensor(DirectTemperatureSensorBase):
     def __init__(self, inverter_device: InverterDevice, coordinator: DirectCoordinator):
         super().__init__(
@@ -452,6 +480,7 @@ DIRECT_SENSORS = [
     DirectBatteryDischargeCurrentSensor,
     DirectBatteryCapacitySensor,
     DirectInverterOutputPowerSensor,
+    DirectInverterGridInputPowerSensor,
     DirectInverterTemperatureSensor,
     DirectGridVoltageSensor,
     DirectGridFrequencySensor,
