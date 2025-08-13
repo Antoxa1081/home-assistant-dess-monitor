@@ -64,6 +64,7 @@ async def _migrate_data_to_options(hass: HomeAssistant, entry: ConfigEntry):
         'direct_request_protocol',
         'devices',
         'raw_sensors',
+        'work_mode',
     ]
     k = 0
     for field in fields:

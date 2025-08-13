@@ -3,10 +3,12 @@
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from custom_components.dess_monitor.sensors.direct_sensor import DIRECT_SENSORS, generate_qpiri_sensors
+from custom_components.dess_monitor.sensors.universal_direct_sensors import UNIFIED_SENSORS, generate_unified_spec_sensors
 from . import HubConfigEntry
+from .config_flow import WorkMode
 from .sensors.direct_energy_sensors import DirectInverterOutputEnergySensor, DirectPV2EnergySensor, \
-    DirectPVEnergySensor, DirectBatteryInEnergySensor, DirectBatteryOutEnergySensor, DirectBatteryStateOfChargeSensor
+    DirectPVEnergySensor, DirectBatteryInEnergySensor, DirectBatteryOutEnergySensor, DirectBatteryStateOfChargeSensor, \
+    DirectInverterGridInputEnergySensor
 from .sensors.dynamic_sensor import *
 from .sensors.energy_sensors import *
 from .sensors.init_sensors import *
@@ -22,14 +24,13 @@ async def async_setup_entry(
     new_devices = []
 
     for item in hub.items:
-        new_devices.extend(create_static_sensors(item, hub.coordinator))
-
-        if should_add_dynamic_sensors(config_entry, hub, item):
-            new_devices.extend(create_dynamic_sensors(item, hub.coordinator))
-
-        if should_add_direct_sensors(config_entry, hub, item):
-            new_devices.extend(create_direct_sensors(item, hub.direct_coordinator))
-            new_devices.extend(generate_qpiri_sensors(item, hub.direct_coordinator))
+        if config_entry.options.get('work_mode') != WorkMode.DIRECT.value:
+            new_devices.extend(create_static_sensors(item, hub.coordinator))
+            if should_add_dynamic_sensors(config_entry, hub, item):
+                new_devices.extend(create_dynamic_sensors(item, hub.coordinator))
+        if config_entry.options.get('work_mode') == WorkMode.DIRECT.value:
+            new_devices.extend(create_unified_sensors(item, hub.direct_coordinator))  # <— unified runtime
+            new_devices.extend(generate_unified_spec_sensors(item, hub.direct_coordinator))  # <— unified «QPIRI»
             new_devices.extend([
                 DirectPVEnergySensor(item, hub.direct_coordinator),
                 DirectPV2EnergySensor(item, hub.direct_coordinator),
@@ -139,7 +140,6 @@ def should_add_direct_sensors(config_entry, hub, item):
     )
 
 
-def create_direct_sensors(item, coordinator):
-    """Return direct protocol-based sensors for an item."""
-    direct_sensor_classes = DIRECT_SENSORS
-    return [sensor_cls(item, coordinator) for sensor_cls in direct_sensor_classes]
+def create_unified_sensors(item, coordinator):
+    unified_classes = UNIFIED_SENSORS
+    return [cls(item, coordinator) for cls in unified_classes]

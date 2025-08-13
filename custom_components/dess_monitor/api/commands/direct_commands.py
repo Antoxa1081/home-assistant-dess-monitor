@@ -197,6 +197,7 @@ def decode_qbeqi(ascii_str):
     ]
     return dict(zip(fields, values))
 
+
 def resolve_grid_input_power(qpigs: dict, qpiri: dict) -> float:
     try:
         status_bits = qpigs["device_status_bits_b7_b0"]
@@ -279,9 +280,28 @@ def get_command_name_by_hex(hex_string: str) -> str:
             return name
     return "Unknown HEX command"
 
-# # Пример вызова:
-# hex_data = "28 32 33 31 2E 38 20 35 30 2E 30 20 32 33 31 2E 38 20 35 30 2E 30 20 30 31 31 35 20 30 30 31 36 20 30 30 32 20 34 30 38 20 32 37 2E 30 30 20 30 31 32 20 30 39 35 20 30 30 33 30 20 30 30 30 30 20 30 30 30 2E 30 20 30 30 2E 30 30 20 30 30 30 30 30 20 30 30 30 31 30 31 30 31 20 30 30 20 30 30 20 30 30 30 30 31 20 30 31 30 9E CA 0D"
-# decoded = decode_direct_response('QPIGS2', hex_data)
-#
-# for key, value in decoded.items():
-#     print(f"{key:35} : {value}")
+    # # Пример вызова:
+    # hex_data = "28 32 33 31 2E 38 20 35 30 2E 30 20 32 33 31 2E 38 20 35 30 2E 30 20 30 31 31 35 20 30 30 31 36 20 30 30 32 20 34 30 38 20 32 37 2E 30 30 20 30 31 32 20 30 39 35 20 30 30 33 30 20 30 30 30 30 20 30 30 30 2E 30 20 30 30 2E 30 30 20 30 30 30 30 30 20 30 30 30 31 30 31 30 31 20 30 30 20 30 30 20 30 30 30 30 31 20 30 31 30 9E CA 0D"
+    # decoded = decode_direct_response('QPIGS2', hex_data)
+    #
+    # for key, value in decoded.items():
+    #     print(f"{key:35} : {value}")
+
+
+hex_input = "28 32 31 38 2E 35 20 35 30 2E 30 20 32 31 38 2E 35 20 35 30 2E 30 20 30 32 36 32 20 30 31 30 33 20 30 30 34 20 34 31 39 20 35 32 2E 35 30 20 30 30 30 20 31 30 30 20 30 30 33 31 20 30 30 2E 30 20 30 30 30 2E 30 20 30 30 2E 30 30 20 30 30 30 30 30 20 30 30 30 31 30 31 30 31 20 30 30 20 30 30 20 30 30 30 30 30 20 31 31 30 C3 8B 0D"
+
+
+def decode(hex_input):
+    if hex_input == 'null':
+        return {"error": "null response received. Command not accepted."}
+    ascii_str = decode_ascii_response(hex_input)
+
+    if ascii_str.startswith("NAK") or "NAK" in ascii_str:
+        return {"error": "NAK response received. Command not accepted."}
+    decoded = decode_qpigs(ascii_str)
+    return decoded
+
+
+data = decode(hex_input)
+for key, value in data.items():
+    print(f"{key:35} : {value}")
