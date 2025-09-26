@@ -6,7 +6,7 @@ from datetime import datetime
 
 import aiohttp
 
-DOMAIN_BASE_URL = 'web.shinemonitor.com'
+DOMAIN_BASE_URL = 'web.dessmonitor.com'
 
 headers = {
     'Host': DOMAIN_BASE_URL,
