@@ -6,7 +6,7 @@ from datetime import datetime
 
 import aiohttp
 
-DOMAIN_BASE_URL = 'web1.shinemonitor.com'
+DOMAIN_BASE_URL = 'web.shinemonitor.com'
 
 headers = {
     'Host': DOMAIN_BASE_URL,
@@ -59,8 +59,8 @@ def generate_signature(salt, secret, token, params):
 
 
 def generate_params_signature(token, secret, params):
-    # salt = int(time.time())
-    salt = '1758997943480'
+    salt = int(time.time())
+    print('generate_params_signature', salt, params)
     return {
         'sign': generate_signature(salt, secret, token, params),
         'salt': salt,
@@ -80,6 +80,7 @@ async def create_auth_api_request(token, secret, params, raise_error=True):
             if json['err'] == 0:
                 return json['dat']
             else:
+                print(json)
                 if raise_error:
                     if json['err'] == 10:
                         raise AuthInvalidateError
