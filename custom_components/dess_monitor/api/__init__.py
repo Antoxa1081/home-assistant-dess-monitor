@@ -59,7 +59,8 @@ def generate_signature(salt, secret, token, params):
 
 
 def generate_params_signature(token, secret, params):
-    salt = int(time.time())
+    # salt = int(time.time())
+    salt = '1758997943480'
     return {
         'sign': generate_signature(salt, secret, token, params),
         'salt': salt,
@@ -117,7 +118,7 @@ async def get_devices(token, secret, params=None):
         params = {}
     payload = {
         'action': 'webQueryDeviceEs',
-        'i18n': 'en_US',
+        # 'i18n': 'en_US',
         'source': '1',
         'page': '0',
         'pagesize': '15',
@@ -141,7 +142,7 @@ def extract_device_identity(device):
 async def get_device_energy_flow(token, secret, device_identity):
     payload = {
         'action': 'webQueryDeviceEnergyFlowEs',
-        'i18n': 'en_US',
+        # 'i18n': 'en_US',
         'source': '1',
         **extract_device_identity(device_identity)
     }
@@ -153,7 +154,7 @@ async def get_device_energy_flow(token, secret, device_identity):
 async def get_device_last_data(token, secret, device_identity):
     payload = {
         'action': 'querySPDeviceLastData',
-        'i18n': 'en_US',
+        # 'i18n': 'en_US',
         'source': '1',
         **extract_device_identity(device_identity)
     }
@@ -165,7 +166,7 @@ async def get_device_last_data(token, secret, device_identity):
 async def get_device_pars(token, secret, device_identity):
     payload = {
         'action': 'queryDeviceParsEs',
-        'i18n': 'en_US',
+        # 'i18n': 'en_US',
         'source': '1',
         **extract_device_identity(device_identity)
     }
@@ -177,7 +178,7 @@ async def get_device_pars(token, secret, device_identity):
 async def get_device_ctrl_value(token: str, secret: str, device_identity, param_id: str):
     payload = {
         'action': 'queryDeviceCtrlValue',
-        'i18n': 'en_US',
+        # 'i18n': 'en_US',
         'source': '1',
         'id': param_id,
         **extract_device_identity(device_identity),
@@ -192,7 +193,7 @@ async def get_device_ctrl_value(token: str, secret: str, device_identity, param_
 async def get_device_ctrl_fields(token: str, secret: str, device_identity):
     payload = {
         'action': 'queryDeviceCtrlField',
-        'i18n': 'en_US',
+        # 'i18n': 'en_US',
         'source': '1',
         **extract_device_identity(device_identity),
     }
@@ -204,7 +205,7 @@ async def get_device_ctrl_fields(token: str, secret: str, device_identity):
 async def get_device_fields(token: str, secret: str, device_identity):
     payload = {
         'action': 'queryDeviceFields',
-        'i18n': 'en_US',
+        # 'i18n': 'en_US',
         'source': '1',
         **extract_device_identity(device_identity),
     }
@@ -216,7 +217,7 @@ async def get_device_fields(token: str, secret: str, device_identity):
 async def get_device_historical_data(token: str, secret: str, device_identity):
     payload = {
         'action': 'queryDeviceDataOneDayPaging',
-        'i18n': 'en_US',
+        # 'i18n': 'en_US',
         'source': '1',
         'page': '0',
         'pagesize': '15',
@@ -245,7 +246,7 @@ async def get_collectors(token, secret, params):
 async def set_ctrl_device_param(token: str, secret: str, device_identity, param_id: str, value: str):
     payload = {
         'action': 'ctrlDevice',
-        'i18n': 'en_US',
+        # 'i18n': 'en_US',
         'source': '1',
         'id': param_id,
         'val': value,
