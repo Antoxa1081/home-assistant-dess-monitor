@@ -131,9 +131,13 @@ class InverterDynamicSettingNumber(NumberBase):
         # if 'hint' in field_data:
         #
         # # "hint": "25.0~31.5V 48.0~61.0V"
+        if self._attr_native_unit_of_measurement == SensorDeviceClass.POWER:
+            self._attr_native_step = 1
+        else:
+            self._attr_native_step = 0.1
+
         self._attr_native_min_value = 0
         self._attr_native_max_value = 10000
-        self._attr_native_step = 0.1
         self._attr_mode = NumberMode.BOX
 
     # async def async_added_to_hass(self) -> None:
@@ -169,7 +173,8 @@ class InverterDynamicSettingNumber(NumberBase):
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
         param_id = self._service_param_id
-        param_value = str(value)
+        value_updated = int(round(value)) if self._attr_native_unit_of_measurement == SensorDeviceClass.POWER else value
+        param_value = str(value_updated)
         # print('set_ctrl_device_param', param_id, param_value)
         await set_ctrl_device_param(
             self.coordinator.auth['token'],
