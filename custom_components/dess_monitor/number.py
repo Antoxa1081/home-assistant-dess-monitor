@@ -119,10 +119,11 @@ class InverterDynamicSettingNumber(NumberBase):
             'HZ': SensorDeviceClass.FREQUENCY,
             '%': SensorDeviceClass.BATTERY,
         }
-        if 'unit' in field_data:
-            mapped = device_class_map[field_data['unit']]
-            if mapped:
-                self._attr_native_value = field_data['unit']
+        unit = field_data.get('unit')
+        if unit is not None:
+            mapped = device_class_map.get(unit)
+            if mapped is not None:
+                self._attr_native_unit_of_measurement = mapped
             else:
                 self._attr_native_unit_of_measurement = 'V'  # field_data['unit']
         else:
@@ -133,11 +134,12 @@ class InverterDynamicSettingNumber(NumberBase):
         # # "hint": "25.0~31.5V 48.0~61.0V"
         if self._attr_native_unit_of_measurement == SensorDeviceClass.POWER:
             self._attr_native_step = 1
+            self._attr_native_max_value = 10000
         else:
             self._attr_native_step = 0.1
 
         self._attr_native_min_value = 0
-        self._attr_native_max_value = 10000
+        self._attr_native_max_value = 100
         self._attr_mode = NumberMode.BOX
 
     # async def async_added_to_hass(self) -> None:
