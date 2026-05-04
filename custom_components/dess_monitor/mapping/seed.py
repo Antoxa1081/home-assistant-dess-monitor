@@ -302,6 +302,8 @@ CANONICAL_METRICS: dict[str, list[ProviderKeyCandidate]] = {
         ProviderKeyCandidate("bt_input_power_1", MATCH_FIELD_PAR),
         ProviderKeyCandidate("PV2 Charging power", MATCH_FIELD_ID),
         ProviderKeyCandidate("PV2 input power", MATCH_FIELD_PAR),
+        ProviderKeyCandidate("PV2 Charging Power", MATCH_FIELD_ID),
+        ProviderKeyCandidate("PV2 Input Power", MATCH_FIELD_PAR),
         # Anenji 11kw (devcode 6544) — eybond explicit PV2 power.
         ProviderKeyCandidate("eybond_read_43975", MATCH_FIELD_PAR),
         # MiC 6.2 (devcode 6416) — PV2 input power lives under a generic
@@ -311,6 +313,9 @@ CANONICAL_METRICS: dict[str, list[ProviderKeyCandidate]] = {
     "pv2_voltage": [
         ProviderKeyCandidate("bt_voltage_2", MATCH_FIELD_PAR),
         ProviderKeyCandidate("PV2 Input voltage", MATCH_FIELD_ID),
+        ProviderKeyCandidate("PV2 Voltage", MATCH_FIELD_ID),
+        ProviderKeyCandidate("PV2 Input Voltage", MATCH_FIELD_ID),
+        ProviderKeyCandidate("PV2 Input Voltage", MATCH_FIELD_PAR),
         # Anenji 11kw (devcode 6544).
         ProviderKeyCandidate("eybond_read_43973", MATCH_FIELD_PAR),
         # Stevo Hybrid Monster (devcode 6467) — counterintuitive: id
@@ -320,6 +325,9 @@ CANONICAL_METRICS: dict[str, list[ProviderKeyCandidate]] = {
     "pv2_input_current": [
         ProviderKeyCandidate("pv_input_current2", MATCH_FIELD_PAR),
         ProviderKeyCandidate("PV2 Input current", MATCH_FIELD_ID),
+        ProviderKeyCandidate("PV2 Input Current", MATCH_FIELD_ID),
+        ProviderKeyCandidate("PV2 Input Current", MATCH_FIELD_PAR),
+        ProviderKeyCandidate("PV2 Current", MATCH_FIELD_PAR),
         # Stevo Hybrid Monster (devcode 6467).
         ProviderKeyCandidate("pv_input_current_2", MATCH_FIELD_ID),
     ],
