@@ -248,7 +248,38 @@ def resolve_pv_power(data, inverter_device):
 
 
 def resolve_pv2_power(data, inverter_device):
-    return _resolve(inverter_device, "pv2_power", data)
+    """Direct PV2 power if exposed; otherwise compute ``total − PV1``.
+
+    Some firmwares (e.g. devcode 6416 on certain releases) only publish
+    ``PV1 Input Power`` and ``PV total Power`` without a dedicated PV2
+    field. When that's the case we derive the PV2 leg as the difference,
+    clamped at 0. The fallback is suppressed for single-MPPT devices —
+    detected by ``pv_power`` and ``pv_total_power`` discovering the same
+    provider key — so they don't get a phantom PV2 sensor stuck at 0.
+    """
+    direct = _resolve(inverter_device, "pv2_power", data)
+    if direct is not None:
+        return direct
+    total = _resolve(inverter_device, "pv_total_power", data)
+    pv1 = _resolve(inverter_device, "pv_power", data)
+    if total is None or pv1 is None:
+        return None
+    try:
+        mapping = inverter_device.hub.mapping
+        pv1_cand = mapping.discovered_provider_key(inverter_device.inverter_id, "pv_power")
+        total_cand = mapping.discovered_provider_key(inverter_device.inverter_id, "pv_total_power")
+    except AttributeError:
+        pv1_cand = total_cand = None
+    if (
+        pv1_cand is not None
+        and total_cand is not None
+        and pv1_cand.provider_key == total_cand.provider_key
+        and pv1_cand.match_field == total_cand.match_field
+    ):
+        # Single-MPPT firmware — pv1 and total resolve from the same key.
+        return None
+    diff = total - pv1
+    return diff if diff > 0 else 0.0
 
 
 def resolve_pv_voltage(data, inverter_device):

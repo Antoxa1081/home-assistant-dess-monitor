@@ -298,6 +298,16 @@ CANONICAL_METRICS: dict[str, list[ProviderKeyCandidate]] = {
         ProviderKeyCandidate("pv_eybond_read_33", MATCH_FIELD_ID),
         ProviderKeyCandidate("PV Current", MATCH_FIELD_PAR),
     ],
+    # Total PV power across all MPPT strings. Useful as a fallback when the
+    # firmware exposes only PV1 + total (no explicit PV2 leg) — the PV2
+    # resolver computes ``total − pv1`` in that case (devcode 6416 on
+    # certain firmwares).
+    "pv_total_power": [
+        ProviderKeyCandidate("pv_output_power", MATCH_FIELD_PAR),
+        ProviderKeyCandidate("pv_output_power", MATCH_FIELD_ID),
+        ProviderKeyCandidate("PV total Power", MATCH_FIELD_PAR),
+        ProviderKeyCandidate("Total PV Power", MATCH_FIELD_ID),
+    ],
     "pv2_power": [
         ProviderKeyCandidate("bt_input_power_1", MATCH_FIELD_PAR),
         ProviderKeyCandidate("PV2 Charging power", MATCH_FIELD_ID),
