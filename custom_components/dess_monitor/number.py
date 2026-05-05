@@ -151,6 +151,45 @@ def _parse_hint(
     return lo, hi, has_decimal
 
 
+# Standard battery-bank nominal voltages used to infer which voltage system
+# the cloud's hint was sized for when the inverter's rated voltage doesn't
+# match the hint's range.
+_NOMINAL_BATTERY_VOLTAGES: tuple[float, ...] = (12.0, 24.0, 36.0, 48.0)
+
+
+def _rescale_voltage_hint(
+        lo: float, hi: float, rated_battery_voltage: Optional[float],
+) -> tuple[float, float]:
+    """Rescale a voltage range when it's clearly sized for a different system.
+
+    Some firmwares ship a single hint sized for a 24V system regardless of the
+    inverter's actual battery voltage — e.g. devcode 2449 returns
+    ``hint="25.0~30.0"`` for ``bat_charging_bulk_voltage`` even when the bank
+    is 48V (real bulk ≈ 58V, way outside ``[25, 30]``). When the entire range
+    sits well below the rated voltage, infer the hint's nominal system from
+    its midpoint (charging spans ~0.85× cutoff to ~1.40× equalisation) and
+    rescale by the ratio so realistic values become enterable. Hints whose
+    range already reaches into the operating window (``hi ≥ 0.9 × rated``) are
+    left alone so correctly-sized hints keep their precision.
+    """
+    if rated_battery_voltage is None or rated_battery_voltage <= 0:
+        return lo, hi
+    if hi >= rated_battery_voltage * 0.9:
+        return lo, hi
+    midpoint = (lo + hi) / 2.0
+    plausible = [
+        n for n in _NOMINAL_BATTERY_VOLTAGES
+        if n * 0.85 <= midpoint <= n * 1.40
+    ]
+    if not plausible:
+        return lo, hi
+    inferred = max(plausible)  # prefer the largest plausible system
+    if inferred <= 0 or abs(inferred - rated_battery_voltage) < 1.0:
+        return lo, hi
+    factor = rated_battery_voltage / inferred
+    return lo * factor, hi * factor
+
+
 async def async_setup_entry(
         hass: HomeAssistant,
         config_entry: HubConfigEntry,
@@ -305,6 +344,8 @@ class InverterDynamicSettingNumber(NumberBase, RestoreNumber):
 
         if parsed is not None:
             lo, hi, has_decimal = parsed
+            if unit == UnitOfElectricPotential.VOLT:
+                lo, hi = _rescale_voltage_hint(lo, hi, rated_battery_voltage)
             self._attr_native_min_value = lo
             self._attr_native_max_value = hi
             self._attr_native_step = 0.1 if has_decimal else 1.0

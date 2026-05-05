@@ -389,6 +389,7 @@ CANONICAL_METRICS: dict[str, list[ProviderKeyCandidate]] = {
     ],
     "sy_rated_battery_voltage": [
         ProviderKeyCandidate("sy_rated_battery_voltage", MATCH_FIELD_PAR),
+        ProviderKeyCandidate("gd_battery_rating_voltage", MATCH_FIELD_ID),
     ],
     "bt_comeback_utility_voltage": [
         ProviderKeyCandidate("bt_comeback_utility_iode", MATCH_FIELD_PAR),
