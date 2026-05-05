@@ -28,6 +28,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.dess_monitor import MainCoordinator, HubConfigEntry
+from custom_components.dess_monitor.api.resolvers.data_resolvers import resolve_sy_rated_battery_voltage
 from custom_components.dess_monitor.const import (
     DOMAIN,
     CONF_DYNAMIC_SETTINGS_INTERVAL,
@@ -80,9 +81,16 @@ _UNIT_TO_HA: dict[str, tuple[str, Optional[NumberDeviceClass]]] = {
     "days": (UnitOfTime.DAYS, NumberDeviceClass.DURATION),
 }
 
-# "60.0~66V"  /  "50.0~80A"  /  "1~900min"  /  "0-900min"  /  "1-90".
-_HINT_RANGE_RE = re.compile(
-    r"^\s*(-?\d+(?:\.\d+)?)\s*[~\-\u2013\u2014]\s*(-?\d+(?:\.\d+)?)\s*([A-Za-z%\u00b0]*)\s*$"
+# Match one numeric range token ("25.0~31.5", "1-900", "60.0~66"), optionally
+# followed by a battery-system annotation in parens like "(24V)" / "(48V)".
+# Cloud hints come in two known shapes:
+#   "60.0~66V"                          — single range, optional unit suffix
+#   "25.0~31.5(24V) 48.0~61.0(48V)"     — one range per battery system
+# `findall` lets us tolerate either, plus stray unit suffixes after a range.
+_RANGE_TOKEN_RE = re.compile(
+    r"(-?\d+(?:\.\d+)?)\s*[~\-\u2013\u2014]\s*(-?\d+(?:\.\d+)?)"
+    r"(?:\s*\(\s*(\d+)\s*V\s*\))?",
+    re.IGNORECASE,
 )
 
 
@@ -94,21 +102,52 @@ def _resolve_unit(raw: Optional[str]) -> tuple[Optional[str], Optional[NumberDev
     return raw, None  # unknown unit — show as-is, no device_class
 
 
-def _parse_hint(hint: Optional[str]) -> Optional[tuple[float, float, bool]]:
-    """Return ``(min, max, has_decimal)`` parsed from a ``"<a>~<b>[unit]"`` hint."""
+def _parse_hint(
+        hint: Optional[str],
+        rated_battery_voltage: Optional[float] = None,
+) -> Optional[tuple[float, float, bool]]:
+    """Return ``(min, max, has_decimal)`` extracted from a cloud range string.
+
+    For the multi-range shape ``"25.0~31.5(24V) 48.0~61.0(48V)"`` we prefer the
+    range whose ``(NV)`` annotation matches ``rated_battery_voltage`` (rounded
+    to int). When the rated voltage is unknown, or no annotation matches, we
+    widen to the union of all ranges so the field stays editable rather than
+    getting clamped to the wrong battery system's bounds.
+    """
     if not hint or not isinstance(hint, str):
         return None
-    m = _HINT_RANGE_RE.match(hint)
-    if not m:
+
+    parsed_ranges: list[tuple[float, float, bool, Optional[int]]] = []
+    for a_raw, b_raw, vtag in _RANGE_TOKEN_RE.findall(hint):
+        try:
+            a, b = float(a_raw), float(b_raw)
+        except ValueError:
+            continue
+        lo, hi = (a, b) if a <= b else (b, a)
+        has_decimal = "." in a_raw or "." in b_raw
+        bat_v: Optional[int]
+        try:
+            bat_v = int(vtag) if vtag else None
+        except ValueError:
+            bat_v = None
+        parsed_ranges.append((lo, hi, has_decimal, bat_v))
+
+    if not parsed_ranges:
         return None
-    a_raw, b_raw = m.group(1), m.group(2)
-    try:
-        a = float(a_raw)
-        b = float(b_raw)
-    except ValueError:
-        return None
-    lo, hi = (a, b) if a <= b else (b, a)
-    has_decimal = "." in a_raw or "." in b_raw
+
+    if rated_battery_voltage is not None:
+        try:
+            target = int(round(float(rated_battery_voltage)))
+        except (TypeError, ValueError):
+            target = None
+        if target is not None:
+            for lo, hi, has_decimal, bat_v in parsed_ranges:
+                if bat_v is not None and bat_v == target:
+                    return lo, hi, has_decimal
+
+    lo = min(r[0] for r in parsed_ranges)
+    hi = max(r[1] for r in parsed_ranges)
+    has_decimal = any(r[2] for r in parsed_ranges)
     return lo, hi, has_decimal
 
 
@@ -138,13 +177,20 @@ async def async_setup_entry(
         # grid sensors
         if coordinator_data is None or item.inverter_id not in coordinator_data:
             continue
-        fields = coordinator_data[item.inverter_id]['ctrl_fields']
+        device_data = coordinator_data[item.inverter_id]
+        fields = device_data['ctrl_fields']
         if fields is None:
             continue
         if config_entry.options.get('dynamic_settings', False) is True:
+            try:
+                rated_v = resolve_sy_rated_battery_voltage(device_data, item)
+            except Exception:  # noqa: BLE001 — resolver may raise if pars not yet seeded
+                rated_v = None
             async_add_entities(list(
                 map(
-                    lambda field_data: InverterDynamicSettingNumber(item, coordinator, field_data),
+                    lambda field_data: InverterDynamicSettingNumber(
+                        item, coordinator, field_data, rated_v,
+                    ),
                     filter(lambda field: 'item' not in field, fields)
                 )
             )
@@ -217,21 +263,46 @@ class InverterDynamicSettingNumber(NumberBase, RestoreNumber):
             # ``_poll_interval`` later, sparing the cloud at startup.
             self._last_updated = int(datetime.now().timestamp())
 
-    def __init__(self, inverter_device: InverterDevice, coordinator: MainCoordinator, field_data):
+    def __init__(
+            self,
+            inverter_device: InverterDevice,
+            coordinator: MainCoordinator,
+            field_data,
+            rated_battery_voltage: Optional[float] = None,
+    ):
         super().__init__(inverter_device, coordinator)
         self._service_param_id = field_data['id']
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_settings_{field_data['id']}"
         self._attr_name = f"{self._inverter_device.name} SET {field_data['name']}"
 
-        unit, device_class = _resolve_unit(field_data.get('unit'))
+        # Range and step: try the proper "hint" string first
+        # ("60.0~66V", "1~900min", "1-90"). Some firmwares (e.g. devcode 2341
+        # for ``bat_sp_bulk_charging_voltage``) omit ``hint`` and pack the
+        # range into ``unit`` instead — fall through and parse that. When the
+        # hint is multi-range (``"25.0~31.5(24V) 48.0~61.0(48V)"``) the parser
+        # uses ``rated_battery_voltage`` to pick the right system, or widens to
+        # the union if it can't be inferred.
+        raw_hint = field_data.get('hint')
+        raw_unit = field_data.get('unit')
+        parsed = _parse_hint(raw_hint, rated_battery_voltage)
+        unit_was_used_as_hint = False
+        if parsed is None:
+            parsed_from_unit = _parse_hint(raw_unit, rated_battery_voltage)
+            if parsed_from_unit is not None:
+                parsed = parsed_from_unit
+                unit_was_used_as_hint = True
+
+        if unit_was_used_as_hint:
+            # Every observed multi-range hint has been a battery-voltage one;
+            # treat the field as voltage so HA renders a sensible unit/icon
+            # instead of the raw range string.
+            unit, device_class = UnitOfElectricPotential.VOLT, NumberDeviceClass.VOLTAGE
+        else:
+            unit, device_class = _resolve_unit(raw_unit)
         self._attr_native_unit_of_measurement = unit
         if device_class is not None:
             self._attr_device_class = device_class
 
-        # Range and step: try to derive from the cloud's "hint" string
-        # ("60.0~66V", "1~900min", "1-90"); fall back to wide defaults so the
-        # field stays editable even when the device omits a hint.
-        parsed = _parse_hint(field_data.get('hint'))
         if parsed is not None:
             lo, hi, has_decimal = parsed
             self._attr_native_min_value = lo
