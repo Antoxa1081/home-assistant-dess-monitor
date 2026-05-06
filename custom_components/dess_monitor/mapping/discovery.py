@@ -28,7 +28,7 @@ from .storage import MappingStorage
 
 _LOGGER = logging.getLogger(__name__)
 
-_SNAPSHOT_VERSION = 1
+_SNAPSHOT_VERSION = 2  # bump invalidates v1 pins (issue #88: pars-block stale binding)
 
 
 class MappingDiscovery:
@@ -201,15 +201,22 @@ class MappingDiscovery:
     def _lookup_item(
             cand: ProviderKeyCandidate, data: dict[str, Any],
     ) -> Optional[dict[str, Any]]:
-        """Return the matching payload item, preferring fresh WS data.
+        """Return the matching payload item, preferring fresh data over cached.
 
-        Each device entry contains both polled subtrees (``last_data``,
-        ``pars``, ``energy_flow``) and a live ``ws_data`` subtree fed by the
-        WebSocket stream. We search ``ws_data`` first so that whenever the
-        stream is delivering, its values shadow the (possibly minutes-old)
-        polled snapshot — otherwise ``resolve_param`` would just return the
-        first match it bumps into during a recursive walk, which is whatever
-        landed earlier in dict-insertion order.
+        Each device entry contains live blocks (``ws_data``, ``last_data``,
+        ``energy_flow``) and a cached ``pars`` snapshot. The cached snapshot
+        refreshes only every 5 minutes (rate-limit mitigation in the
+        coordinator), so it can lag behind the live blocks. Issue #88: when a
+        snake_case key like ``bt_battery_charging_current`` appears as ``id``
+        in ``last_data`` *and* as ``par`` in ``pars.parameter``, a recursive
+        walk of the merged tree could land on the stale ``pars`` entry first,
+        pinning the sensor to a value that lags by up to 5 minutes.
+
+        Fix: yield haystacks separately in priority order (WS > live polled >
+        cached polled). Each haystack is exhausted in full — including the
+        opposite-field fallback inside :func:`_search_haystack` — before we
+        move on. That guarantees a metric available in any live block always
+        wins over its cached duplicate.
 
         Within each haystack we still try the declared ``match_field`` first
         and fall back to the opposite shape — devices often mirror the same
@@ -228,13 +235,23 @@ class MappingDiscovery:
 
     @staticmethod
     def _iter_haystacks(data: dict[str, Any]):
-        """Yield ``ws_data`` first (live), then the polled subtrees as a whole."""
+        """Yield haystacks in priority order: WS > live polled > cached polled.
+
+        Splitting the polled subtree into "live" (everything except ``pars``)
+        and "cached" (``pars`` only) prevents :class:`MappingDiscovery` from
+        accidentally pinning a candidate to the cached snapshot when the same
+        snake_case key appears in both — see :func:`_lookup_item` for the
+        full rationale (issue #88).
+        """
         ws = data.get("ws_data")
         if isinstance(ws, dict) and ws:
             yield ws
-        polled = {k: v for k, v in data.items() if k != "ws_data"}
-        if polled:
-            yield polled
+        live = {k: v for k, v in data.items() if k not in ("ws_data", "pars")}
+        if live:
+            yield live
+        cached = data.get("pars")
+        if isinstance(cached, dict) and cached:
+            yield cached
 
     @staticmethod
     def _search_haystack(
