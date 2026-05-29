@@ -10,6 +10,8 @@ extend-exclude = [
     "tests/test_protocols_smoke.py",
     "tests/test-api.py",
     "tests/test.py",
+    # Ad-hoc Modbus probe scripts — not imported by the integration.
+    "custom_components/dess_monitor/api/commands/",
 ]
 
 [tool.ruff.lint]
