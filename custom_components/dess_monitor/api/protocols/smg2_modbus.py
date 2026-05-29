@@ -12,8 +12,9 @@ opaque Modbus frames). Source for the register layout:
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from .base import Protocol, ResponseSchema
 from .crc import crc16_modbus, crc16_modbus_bytes
@@ -23,7 +24,6 @@ from .enums import (
     OperatingMode,
     OutputSourcePriority,
 )
-
 
 DEFAULT_UNIT_ID = 1
 

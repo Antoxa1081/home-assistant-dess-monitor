@@ -40,7 +40,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Optional
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
@@ -72,8 +71,8 @@ class VirtualBatteryEstimator:
         self._capacity_ah: float = 0.0
         self._voltage_full: float = 0.0
         self._chemistry: str = "lifepo4"
-        self._soc_pct: Optional[float] = None
-        self._last_update_at: Optional[float] = None
+        self._soc_pct: float | None = None
+        self._last_update_at: float | None = None
         self._loaded = False
         self._dirty = False
         self._save_lock = asyncio.Lock()
@@ -118,14 +117,14 @@ class VirtualBatteryEstimator:
             self._chemistry = value
 
     @property
-    def soc(self) -> Optional[float]:
+    def soc(self) -> float | None:
         """Current SOC %; ``None`` while not configured or not yet primed."""
         if not self.configured:
             return None
         return self._soc_pct
 
     @property
-    def last_update_at(self) -> Optional[float]:
+    def last_update_at(self) -> float | None:
         return self._last_update_at
 
     @property
@@ -178,7 +177,7 @@ class VirtualBatteryEstimator:
         except Exception:
             _LOGGER.exception("Failed to remove virtual battery state for %s", self._inverter_id)
 
-    def update(self, voltage: Optional[float], signed_current_a: Optional[float]) -> None:
+    def update(self, voltage: float | None, signed_current_a: float | None) -> None:
         """Tick the estimator with the latest battery readings.
 
         ``signed_current_a``: positive = charging, negative = discharging.

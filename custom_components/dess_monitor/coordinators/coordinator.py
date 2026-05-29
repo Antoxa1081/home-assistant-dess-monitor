@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Coroutine
 from datetime import timedelta
 from time import monotonic
-from typing import Any, Awaitable, Coroutine, TypeVar
+from typing import Any, TypeVar
 
 import async_timeout
 from homeassistant.core import HomeAssistant
@@ -18,8 +19,8 @@ from custom_components.dess_monitor.const import (
     CONF_MAIN_UPDATE_INTERVAL,
     DEFAULT_MAIN_UPDATE_INTERVAL,
     DEFAULT_PARS_REFRESH_INTERVAL,
-    MIN_MAIN_UPDATE_INTERVAL,
     MAX_MAIN_UPDATE_INTERVAL,
+    MIN_MAIN_UPDATE_INTERVAL,
     STALE_LIVE_DATA_MAX_SECONDS,
 )
 from custom_components.dess_monitor.device_cache import DeviceCache
@@ -45,7 +46,7 @@ async def safe_call(coro: Coroutine[Any, Any, T] | Awaitable[T], default: T | No
         # don't add diagnostic value when we already know it's the wire.
         _LOGGER.warning("DESS cloud transient (%s): %s", _action_of(err), err)
         return default
-    except asyncio.TimeoutError as err:
+    except TimeoutError as err:
         _LOGGER.warning("DESS cloud timed out: %s", err)
         return default
     except ApiError as err:

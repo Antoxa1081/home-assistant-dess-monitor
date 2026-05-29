@@ -10,10 +10,10 @@ else (devcode/pn/sn from the cloud schema) is ignored.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from .base import DirectTransport
-
 
 DEFAULT_TIMEOUT = 30.0
 

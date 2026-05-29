@@ -11,7 +11,8 @@ working untouched.
 """
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from ..base import Field, Protocol, ResponseSchema
 from ..crc import crc16_xmodem_bytes
@@ -24,7 +25,6 @@ from ..enums import (
     ParallelMode,
 )
 from ..parsing import is_nak, parse_positional, strip_frame
-
 
 _QPIGS = ResponseSchema("QPIGS", tuple(Field(n) for n in (
     "grid_voltage",

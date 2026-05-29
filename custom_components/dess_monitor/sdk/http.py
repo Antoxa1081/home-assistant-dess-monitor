@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Mapping
 from types import TracebackType
-from typing import Any, Literal, Mapping
+from typing import Any, Literal
 
 import aiohttp
 
@@ -81,7 +82,7 @@ class HttpClient:
             await self._session.close()
             self._session = None
 
-    async def __aenter__(self) -> "HttpClient":
+    async def __aenter__(self) -> HttpClient:
         await self._get_session()
         return self
 
@@ -102,10 +103,32 @@ class HttpClient:
         async with self._semaphore:
             try:
                 async with session.get(url, headers=self._headers) as resp:
-                    body = await resp.json(content_type=None)
+                    # The cloud's upstream balancer occasionally returns
+                    # 502/503/504 with an HTML body — parsing that as JSON
+                    # would raise json.JSONDecodeError (a ValueError, NOT
+                    # aiohttp.ClientError) and propagate unhandled, leaving
+                    # the coordinator to log a traceback every tick until the
+                    # upstream recovers. Check status first and convert to a
+                    # TransportError the coordinator already knows how to wrap.
+                    if resp.status >= 400:
+                        raise errors.TransportError(
+                            f"HTTP {resp.status} {resp.reason or ''}".rstrip(),
+                            code=resp.status,
+                            action=action,
+                        )
+                    try:
+                        body = await resp.json(content_type=None)
+                    except ValueError as exc:
+                        # 2xx with a non-JSON body (maintenance pages, CDN
+                        # interstitials). Same recovery path as 5xx above.
+                        raise errors.TransportError(
+                            f"Non-JSON response: {exc}",
+                            code=resp.status,
+                            action=action,
+                        ) from exc
             except aiohttp.ClientError as exc:
                 raise errors.TransportError(f"HTTP transport failed: {exc}", action=action) from exc
-            except asyncio.TimeoutError as exc:
+            except TimeoutError as exc:
                 raise errors.TransportError("HTTP request timed out", action=action) from exc
 
         if not isinstance(body, dict) or "err" not in body:

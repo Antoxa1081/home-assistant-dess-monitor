@@ -13,13 +13,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from custom_components.dess_monitor.sdk import ApiError
+
 _LOGGER = logging.getLogger(__name__)
+
+# Cloud envelope codes that mean "this device has no record on the server".
+# Treated as stable empty results so we don't re-hit the API every tick.
+_NO_RECORD_CODES: frozenset[int] = frozenset({12})
 
 _STORAGE_VERSION = 1
 
@@ -133,7 +140,21 @@ class DeviceCache:
             entry = self._ctrl_fields.get(pn)
             if _is_fresh(entry, CTRL_FIELDS_TTL):
                 return entry["data"]
-            data = await fetcher()
+            try:
+                data = await fetcher()
+            except ApiError as err:
+                # err=12 "ERR_NO_RECORD" — the cloud just has no ctrl-field
+                # template for this firmware (e.g. devcode 2462, issue #89).
+                # Cache an empty list so we stop hammering the API every tick;
+                # the regular 1h TTL still lets Eybond's catalog catch up later.
+                if err.code in _NO_RECORD_CODES:
+                    _LOGGER.debug(
+                        "ctrl_fields missing for %s (%s); caching empty for %ss",
+                        pn, err, CTRL_FIELDS_TTL,
+                    )
+                    data = {"field": []}
+                else:
+                    raise
             self._ctrl_fields[pn] = {"data": data, "fetched_at": _now()}
             await self._persist()
             return data

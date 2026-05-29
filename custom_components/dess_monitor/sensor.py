@@ -10,9 +10,10 @@ from custom_components.dess_monitor.const import (
     DEFAULT_ENABLE_LAST_AT_SENSORS,
 )
 from custom_components.dess_monitor.sensors.direct_sensor import DIRECT_SENSORS, generate_qpiri_sensors
+
 from . import HubConfigEntry
-from .sensors.dynamic_sensor import _is_supported_unit  # noqa: F401  (used in create_dynamic_sensors)
 from .sensors.dynamic_sensor import *
+from .sensors.dynamic_sensor import _is_supported_unit  # noqa: F401  (used in create_dynamic_sensors)
 from .sensors.energy_sensors import *
 from .sensors.init_sensors import *
 

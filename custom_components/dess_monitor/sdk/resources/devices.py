@@ -13,7 +13,6 @@ from ..models import (
 )
 from ..session import Session
 
-
 _DEFAULT_LIST_PARAMS: dict[str, str] = {
     "i18n": "en_US",
     "source": "1",
