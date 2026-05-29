@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass, RestoreSensor
-from homeassistant.const import EntityCategory, UnitOfEnergy, PERCENTAGE
+from homeassistant.components.sensor import RestoreSensor, SensorDeviceClass, SensorStateClass
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfEnergy
 from homeassistant.core import callback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import slugify

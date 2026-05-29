@@ -1,10 +1,8 @@
 from datetime import datetime
 
 from homeassistant.components.sensor import RestoreSensor, SensorDeviceClass, SensorStateClass
-from homeassistant.const import EntityCategory, UnitOfEnergy, PERCENTAGE
+from homeassistant.const import EntityCategory, UnitOfEnergy
 from homeassistant.core import callback
-from homeassistant.helpers.event import async_track_state_change_event
-from homeassistant.util import slugify
 
 from custom_components.dess_monitor.api.resolvers.data_resolvers import *
 from custom_components.dess_monitor.coordinators.coordinator import MainCoordinator
