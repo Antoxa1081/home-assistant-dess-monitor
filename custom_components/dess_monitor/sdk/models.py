@@ -13,7 +13,7 @@ class Credentials:
     password_hash: str
 
     @classmethod
-    def from_password(cls, username: str, password: str) -> "Credentials":
+    def from_password(cls, username: str, password: str) -> Credentials:
         return cls(username=username, password_hash=hashlib.sha1(password.encode()).hexdigest())
 
 
@@ -52,7 +52,7 @@ class DeviceIdentity:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DeviceIdentity":
+    def from_dict(cls, data: dict[str, Any]) -> DeviceIdentity:
         return cls(
             devaddr=data["devaddr"],
             devcode=data["devcode"],

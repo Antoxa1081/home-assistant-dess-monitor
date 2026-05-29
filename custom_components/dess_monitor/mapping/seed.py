@@ -18,8 +18,8 @@ of lag on dynamic values like charging current. See issue #88.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping, Optional
 
 # --- Public types ------------------------------------------------------------
 
@@ -41,9 +41,9 @@ class ProviderKeyCandidate:
     match_field: str  # MATCH_FIELD_ID | MATCH_FIELD_PAR
     scale: float = 1.0
     offset: float = 0.0
-    unit_hint: Optional[str] = None
-    value_map: Optional[Mapping[str, str]] = None
-    sign: Optional[str] = None  # SIGN_POSITIVE | SIGN_NEGATIVE | None
+    unit_hint: str | None = None
+    value_map: Mapping[str, str] | None = None
+    sign: str | None = None  # SIGN_POSITIVE | SIGN_NEGATIVE | None
 
 
 # --- Value maps reused across canonical names --------------------------------

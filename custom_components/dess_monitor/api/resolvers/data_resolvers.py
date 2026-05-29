@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.util import dt as dt_util
 
@@ -31,8 +31,8 @@ _LAST_SAMPLE_TIME_TZ_OFFSET_HOURS: dict[str, int] = {}
 
 
 def resolve_ws_last_frame_at(
-        data: dict[str, Any], inverter_device: "InverterDevice",
-) -> Optional[datetime]:
+        data: dict[str, Any], inverter_device: InverterDevice,
+) -> datetime | None:
     """Wall-clock UTC time of the most recent WebSocket frame for this device.
 
     The :class:`DeviceStreamManager` writes ``ws_received_at`` (epoch seconds)
@@ -51,7 +51,7 @@ def resolve_ws_last_frame_at(
         return None
 
 
-def resolve_last_sample_time(data: dict[str, Any], inverter_device: "InverterDevice") -> Optional[datetime]:
+def resolve_last_sample_time(data: dict[str, Any], inverter_device: InverterDevice) -> datetime | None:
     """Return ``last_data.gts`` as an aware datetime (assumed in HA local TZ)."""
     device_data = inverter_device.device_data if inverter_device is not None else None
     pn = device_data.get('pn') if isinstance(device_data, dict) else None
@@ -128,7 +128,7 @@ def resolve_last_sample_time(data: dict[str, Any], inverter_device: "InverterDev
 
 # --- mapping-backed resolvers ------------------------------------------------
 
-def _resolve(inverter_device: "InverterDevice", canonical: str, data: dict[str, Any]):
+def _resolve(inverter_device: InverterDevice, canonical: str, data: dict[str, Any]):
     return inverter_device.resolve(canonical, data)
 
 

@@ -46,6 +46,8 @@ class ParallelMode(Enum):
     Master = "0"
     Slave = "1"
     Standalone = "2"
+    PARALLEL_1_PHASE = "3"
+    PARALLEL_3_PHASE = "4"
 
 
 class OperatingMode(Enum):

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Mapping
 from types import TracebackType
-from typing import Any, Literal, Mapping
+from typing import Any, Literal
 
 import aiohttp
 
@@ -81,7 +82,7 @@ class HttpClient:
             await self._session.close()
             self._session = None
 
-    async def __aenter__(self) -> "HttpClient":
+    async def __aenter__(self) -> HttpClient:
         await self._get_session()
         return self
 
@@ -127,7 +128,7 @@ class HttpClient:
                         ) from exc
             except aiohttp.ClientError as exc:
                 raise errors.TransportError(f"HTTP transport failed: {exc}", action=action) from exc
-            except asyncio.TimeoutError as exc:
+            except TimeoutError as exc:
                 raise errors.TransportError("HTTP request timed out", action=action) from exc
 
         if not isinstance(body, dict) or "err" not in body:

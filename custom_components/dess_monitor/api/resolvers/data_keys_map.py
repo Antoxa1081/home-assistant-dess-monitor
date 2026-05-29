@@ -1,6 +1,5 @@
-from typing import Dict
 
-SENSOR_KEYS_MAP: Dict[str, list[str]] = {
+SENSOR_KEYS_MAP: dict[str, list[str]] = {
     "battery_charging_current": [
         "bt_eybond_read_29",
         "bt_battery_charging_current",

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Optional, Union
+from typing import Any
 
 from custom_components.dess_monitor.api.helpers import resolve_param, safe_float
 
@@ -111,7 +111,7 @@ class MappingDiscovery:
             device_pn: str,
             canonical_name: str,
             data: dict[str, Any],
-    ) -> Optional[Union[float, str]]:
+    ) -> float | str | None:
         """Return the normalised value for ``canonical_name`` on ``device_pn``.
 
         ``None`` means the metric isn't present in ``data`` for any known
@@ -143,7 +143,7 @@ class MappingDiscovery:
 
     def discovered_provider_key(
             self, device_pn: str, canonical_name: str,
-    ) -> Optional[ProviderKeyCandidate]:
+    ) -> ProviderKeyCandidate | None:
         """Inspect the pinned candidate for diagnostics. Read-only."""
         return self._pinned.get((device_pn, canonical_name))
 
@@ -161,7 +161,7 @@ class MappingDiscovery:
     @staticmethod
     def _find_seed_candidate(
             canonical: Any, provider_key: Any, match_field: Any,
-    ) -> Optional[ProviderKeyCandidate]:
+    ) -> ProviderKeyCandidate | None:
         if not isinstance(canonical, str) or not isinstance(provider_key, str):
             return None
         if match_field not in ("id", "par"):
@@ -174,7 +174,7 @@ class MappingDiscovery:
     @staticmethod
     def _extract(
             cand: ProviderKeyCandidate, data: dict[str, Any],
-    ) -> Optional[Union[float, str]]:
+    ) -> float | str | None:
         item = MappingDiscovery._lookup_item(cand, data)
         if item is None:
             return None
@@ -200,7 +200,7 @@ class MappingDiscovery:
     @staticmethod
     def _lookup_item(
             cand: ProviderKeyCandidate, data: dict[str, Any],
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Return the matching payload item, preferring fresh data over cached.
 
         Each device entry contains live blocks (``ws_data``, ``last_data``,
@@ -256,7 +256,7 @@ class MappingDiscovery:
     @staticmethod
     def _search_haystack(
             cand: ProviderKeyCandidate, haystack: dict[str, Any],
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         primary_field = cand.match_field
         primary = resolve_param(
             haystack, {primary_field: cand.provider_key}, case_insensitive=True,

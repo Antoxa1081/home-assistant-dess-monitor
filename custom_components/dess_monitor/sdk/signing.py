@@ -3,8 +3,7 @@ from __future__ import annotations
 import hashlib
 import time
 import urllib.parse
-from typing import Mapping
-
+from collections.abc import Mapping
 
 _QUERY_SAFE_CHARS = "@"
 

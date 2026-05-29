@@ -1,9 +1,7 @@
-import asyncio
 import logging
 import random
 import re
-from datetime import timedelta, datetime
-from typing import Optional
+from datetime import datetime, timedelta
 
 import async_timeout
 from homeassistant.components.number import (
@@ -13,8 +11,8 @@ from homeassistant.components.number import (
     RestoreNumber,
 )
 from homeassistant.const import (
-    EntityCategory,
     PERCENTAGE,
+    EntityCategory,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfFrequency,
@@ -27,23 +25,23 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from custom_components.dess_monitor import MainCoordinator, HubConfigEntry
+from custom_components.dess_monitor import HubConfigEntry, MainCoordinator
 from custom_components.dess_monitor.api.resolvers.data_resolvers import resolve_sy_rated_battery_voltage
 from custom_components.dess_monitor.const import (
-    DOMAIN,
-    CONF_DYNAMIC_SETTINGS_INTERVAL,
-    DEFAULT_DYNAMIC_SETTINGS_INTERVAL,
-    MIN_DYNAMIC_SETTINGS_INTERVAL,
-    MAX_DYNAMIC_SETTINGS_INTERVAL,
-    DYNAMIC_SETTINGS_API_TIMEOUT,
     CONF_BATTERY_VIRTUAL_ENABLED,
-    DEFAULT_BATTERY_VIRTUAL_ENABLED,
+    CONF_DYNAMIC_SETTINGS_INTERVAL,
     DEFAULT_BATTERY_CAPACITY_AH,
+    DEFAULT_BATTERY_VIRTUAL_ENABLED,
     DEFAULT_BATTERY_VOLTAGE_FULL,
-    MIN_BATTERY_CAPACITY_AH,
+    DEFAULT_DYNAMIC_SETTINGS_INTERVAL,
+    DOMAIN,
+    DYNAMIC_SETTINGS_API_TIMEOUT,
     MAX_BATTERY_CAPACITY_AH,
-    MIN_BATTERY_VOLTAGE_FULL,
     MAX_BATTERY_VOLTAGE_FULL,
+    MAX_DYNAMIC_SETTINGS_INTERVAL,
+    MIN_BATTERY_CAPACITY_AH,
+    MIN_BATTERY_VOLTAGE_FULL,
+    MIN_DYNAMIC_SETTINGS_INTERVAL,
 )
 from custom_components.dess_monitor.coordinators.coordinator import _clamp
 from custom_components.dess_monitor.hub import InverterDevice
@@ -61,7 +59,7 @@ PARALLEL_UPDATES = 1
 # Map the cloud's free-form unit string onto an HA constant + matching device
 # class. Entries we don't recognise fall through to no-unit/no-class so the
 # entity still works, just without unit-specific UI affordances.
-_UNIT_TO_HA: dict[str, tuple[str, Optional[NumberDeviceClass]]] = {
+_UNIT_TO_HA: dict[str, tuple[str, NumberDeviceClass | None]] = {
     "V": (UnitOfElectricPotential.VOLT, NumberDeviceClass.VOLTAGE),
     "A": (UnitOfElectricCurrent.AMPERE, NumberDeviceClass.CURRENT),
     "%": (PERCENTAGE, None),
@@ -94,7 +92,7 @@ _RANGE_TOKEN_RE = re.compile(
 )
 
 
-def _resolve_unit(raw: Optional[str]) -> tuple[Optional[str], Optional[NumberDeviceClass]]:
+def _resolve_unit(raw: str | None) -> tuple[str | None, NumberDeviceClass | None]:
     if not raw:
         return None, None
     if raw in _UNIT_TO_HA:
@@ -103,9 +101,9 @@ def _resolve_unit(raw: Optional[str]) -> tuple[Optional[str], Optional[NumberDev
 
 
 def _parse_hint(
-        hint: Optional[str],
-        rated_battery_voltage: Optional[float] = None,
-) -> Optional[tuple[float, float, bool]]:
+        hint: str | None,
+        rated_battery_voltage: float | None = None,
+) -> tuple[float, float, bool] | None:
     """Return ``(min, max, has_decimal)`` extracted from a cloud range string.
 
     For the multi-range shape ``"25.0~31.5(24V) 48.0~61.0(48V)"`` we prefer the
@@ -117,7 +115,7 @@ def _parse_hint(
     if not hint or not isinstance(hint, str):
         return None
 
-    parsed_ranges: list[tuple[float, float, bool, Optional[int]]] = []
+    parsed_ranges: list[tuple[float, float, bool, int | None]] = []
     for a_raw, b_raw, vtag in _RANGE_TOKEN_RE.findall(hint):
         try:
             a, b = float(a_raw), float(b_raw)
@@ -125,7 +123,7 @@ def _parse_hint(
             continue
         lo, hi = (a, b) if a <= b else (b, a)
         has_decimal = "." in a_raw or "." in b_raw
-        bat_v: Optional[int]
+        bat_v: int | None
         try:
             bat_v = int(vtag) if vtag else None
         except ValueError:
@@ -158,7 +156,7 @@ _NOMINAL_BATTERY_VOLTAGES: tuple[float, ...] = (12.0, 24.0, 36.0, 48.0)
 
 
 def _rescale_voltage_hint(
-        lo: float, hi: float, rated_battery_voltage: Optional[float],
+        lo: float, hi: float, rated_battery_voltage: float | None,
 ) -> tuple[float, float]:
     """Rescale a voltage range when it's clearly sized for a different system.
 
@@ -307,7 +305,7 @@ class InverterDynamicSettingNumber(NumberBase, RestoreNumber):
             inverter_device: InverterDevice,
             coordinator: MainCoordinator,
             field_data,
-            rated_battery_voltage: Optional[float] = None,
+            rated_battery_voltage: float | None = None,
     ):
         super().__init__(inverter_device, coordinator)
         self._service_param_id = field_data['id']
@@ -376,7 +374,7 @@ class InverterDynamicSettingNumber(NumberBase, RestoreNumber):
                     DeviceIdentity.from_dict(self._inverter_device.device_data),
                     self._service_param_id,
                 )
-        except (asyncio.TimeoutError, Exception) as err:
+        except (TimeoutError, Exception) as err:
             _LOGGER.debug(
                 "Skipping update of %s: %s", self._attr_unique_id, err,
             )

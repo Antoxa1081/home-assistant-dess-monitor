@@ -10,33 +10,33 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import selector
 
-from .sdk import Credentials, DessmonitorClient
 from .const import (  # pylint:disable=unused-import
-    DOMAIN,
-    CONF_MAIN_UPDATE_INTERVAL,
+    CONF_BATTERY_VIRTUAL_ENABLED,
+    CONF_DIRECT_PROTOCOL,
     CONF_DIRECT_UPDATE_INTERVAL,
     CONF_DYNAMIC_SETTINGS_INTERVAL,
-    CONF_ENABLE_WEBSOCKET,
-    CONF_BATTERY_VIRTUAL_ENABLED,
     CONF_ENABLE_LAST_AT_SENSORS,
-    CONF_DIRECT_PROTOCOL,
-    DEFAULT_MAIN_UPDATE_INTERVAL,
+    CONF_ENABLE_WEBSOCKET,
+    CONF_MAIN_UPDATE_INTERVAL,
+    DEFAULT_BATTERY_VIRTUAL_ENABLED,
+    DEFAULT_DIRECT_PROTOCOL,
     DEFAULT_DIRECT_UPDATE_INTERVAL,
     DEFAULT_DYNAMIC_SETTINGS_INTERVAL,
-    DEFAULT_ENABLE_WEBSOCKET,
-    DEFAULT_BATTERY_VIRTUAL_ENABLED,
     DEFAULT_ENABLE_LAST_AT_SENSORS,
-    DEFAULT_DIRECT_PROTOCOL,
+    DEFAULT_ENABLE_WEBSOCKET,
+    DEFAULT_MAIN_UPDATE_INTERVAL,
     DIRECT_PROTOCOL_AXPERT,
     DIRECT_PROTOCOL_PI18,
     DIRECT_PROTOCOL_SMG2,
-    MIN_MAIN_UPDATE_INTERVAL,
+    DOMAIN,
+    MAX_DIRECT_UPDATE_INTERVAL,
+    MAX_DYNAMIC_SETTINGS_INTERVAL,
     MAX_MAIN_UPDATE_INTERVAL,
     MIN_DIRECT_UPDATE_INTERVAL,
-    MAX_DIRECT_UPDATE_INTERVAL,
     MIN_DYNAMIC_SETTINGS_INTERVAL,
-    MAX_DYNAMIC_SETTINGS_INTERVAL,
+    MIN_MAIN_UPDATE_INTERVAL,
 )
+from .sdk import Credentials, DessmonitorClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -100,8 +100,8 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     try:
         await client.auth.login()
         devices = await client.devices.list()
-    except Exception:
-        raise InvalidAuth
+    except Exception as err:
+        raise InvalidAuth from err
     return {
         "title": data["username"],
         "password_hash": password_hash,

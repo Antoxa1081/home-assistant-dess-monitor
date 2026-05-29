@@ -7,7 +7,8 @@ and decodes the reply.
 """
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from .protocols import Protocol, ProtocolRegistry, default_registry
 from .transports import DirectTransport
