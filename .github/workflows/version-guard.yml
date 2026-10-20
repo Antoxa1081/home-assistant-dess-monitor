@@ -1,0 +1,44 @@
+name: Version Guard
+
+# Prevents the drift that confused users on #90/#94: release tags advanced to
+# v0.4.x while manifest.json stayed pinned at "0.3.4". On every version tag we
+# assert the manifest version matches the tag, so a release can never ship with
+# a stale version string again.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  manifest-matches-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert manifest version == tag
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          # Strip the leading "v" and anything after the numeric core
+          # (e.g. "v0.4.1.3-local-protocol" -> "0.4.1.3").
+          version_from_tag="${tag#v}"
+          numeric="${version_from_tag%%-*}"
+
+          # Only enforce on clean numeric tags (MAJOR.MINOR.PATCH[.N]).
+          # Suffixed / pre-release tags are skipped to avoid false failures.
+          if ! [[ "$numeric" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; then
+            echo "Tag '$tag' is not a plain numeric release tag — skipping strict check."
+            exit 0
+          fi
+
+          manifest_version="$(python -c "import json; print(json.load(open('custom_components/dess_monitor/manifest.json'))['version'])")"
+
+          echo "Tag numeric version : $numeric"
+          echo "Manifest version    : $manifest_version"
+
+          if [[ "$numeric" != "$manifest_version" ]]; then
+            echo "::error::manifest.json version ('$manifest_version') does not match release tag ('$tag'). Bump custom_components/dess_monitor/manifest.json before tagging."
+            exit 1
+          fi
+          echo "OK: manifest version matches the release tag."

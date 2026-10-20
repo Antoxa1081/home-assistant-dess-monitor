@@ -5,7 +5,6 @@ from typing import cast
 from ..models import CollectorListResponse
 from ..session import Session
 
-
 _DEFAULT_LIST_PARAMS: dict[str, str] = {
     "source": "1",
     "devtype": "2304",

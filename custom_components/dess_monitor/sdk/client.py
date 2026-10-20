@@ -10,8 +10,8 @@ from .resources import AuthResource, CollectorsResource, ControlResource, Device
 from .session import Session
 from .storage import TokenStorage
 from .streaming import (
-    DEFAULT_INITIAL_BACKOFF_SECONDS,
     DEFAULT_HEARTBEAT_SECONDS,
+    DEFAULT_INITIAL_BACKOFF_SECONDS,
     DEFAULT_MAX_BACKOFF_SECONDS,
     DEFAULT_QUEUE_MAXSIZE,
     DeviceStream,
@@ -83,7 +83,7 @@ class DessmonitorClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def __aenter__(self) -> "DessmonitorClient":
+    async def __aenter__(self) -> DessmonitorClient:
         return self
 
     async def __aexit__(

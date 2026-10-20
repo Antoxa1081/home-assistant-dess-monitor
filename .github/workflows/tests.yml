@@ -1,0 +1,68 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Manual "Run workflow" button in the Actions tab — test CI on a feature
+  # branch without pushing to main or opening a PR.
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - name: Ruff lint
+        run: ruff check custom_components/dess_monitor tests
+
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install test deps (no Home Assistant)
+        # The pure-logic suite needs no HA — tests/conftest.py stubs the package
+        # parents so the HA-free modules import standalone. pytest-asyncio + aiohttp
+        # are required because the SDK/mapping/streaming tests are async and the
+        # SDK imports aiohttp.
+        run: pip install pytest pytest-cov pytest-asyncio aiohttp
+
+      - name: Run pure-logic tests with coverage
+        # HA-dependent test files self-skip via pytest.importorskip; only the
+        # HA-free modules run here. Coverage is reported, not gated.
+        run: >
+          python -m pytest -o addopts="-ra --durations=10"
+          --cov --cov-report=term-missing
+
+  hass:
+    # Installs Home Assistant (via pytest-homeassistant-custom-component, which
+    # pins a compatible HA) and runs the FULL suite — pure + the HA integration
+    # layer (config flow, coordinators, entities, full setup/unload). This is
+    # what catches integration-load regressions and async setup/unload issues.
+    # POSIX-only: pytest-hacc imports fcntl, so it can't run on Windows.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install test deps (pulls a pinned Home Assistant)
+        run: pip install -r requirements-test.txt
+      - name: Run full suite with coverage
+        run: >
+          python -m pytest -o addopts="-ra"
+          --cov --cov-report=term-missing

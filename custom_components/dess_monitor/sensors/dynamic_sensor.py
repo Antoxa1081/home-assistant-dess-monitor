@@ -1,10 +1,9 @@
 from enum import Enum
-from typing import Optional
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import (
-    EntityCategory,
     PERCENTAGE,
+    EntityCategory,
     UnitOfApparentPower,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
@@ -73,7 +72,7 @@ _UNIT_DEVICE_CLASS: dict[str, SensorDeviceClass] = {
 _TOTAL_UNITS = {"Wh", "kWh"}
 
 
-def _canon_unit(raw: Optional[str]) -> Optional[str]:
+def _canon_unit(raw: str | None) -> str | None:
     if not isinstance(raw, str):
         return None
     return _UNIT_ALIASES.get(raw.strip().lower())

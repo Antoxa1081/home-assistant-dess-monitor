@@ -22,7 +22,8 @@ Source: ``PI18_InfiniSolar-V-protocol-20170926`` spec.
 """
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from ..base import Protocol, ResponseSchema
 from ..crc import crc16_xmodem_bytes
@@ -34,7 +35,6 @@ from ..enums import (
     OutputSourcePriority,
 )
 from ..parsing import strip_frame
-
 
 # Logical command name (shared across protocols) → PI18 native command body.
 _LOGICAL_TO_NATIVE: Mapping[str, str] = {

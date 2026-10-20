@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any
 
 from custom_components.dess_monitor.api.resolvers.data_keys_map import SENSOR_KEYS_MAP
 from custom_components.dess_monitor.sdk import DessmonitorClient, DeviceIdentity
@@ -89,7 +89,7 @@ def resolve_param(data, where, case_insensitive=False, find_all=False, default=N
         return found[0] if found else default
 
 
-def safe_float(val: Any, default: Optional[float] = 0.0) -> Optional[float]:
+def safe_float(val: Any, default: float | None = 0.0) -> float | None:
     """Coerce to float, returning ``default`` for None / empty / unparseable input."""
     if val is None:
         return default
@@ -103,7 +103,7 @@ def safe_float(val: Any, default: Optional[float] = 0.0) -> Optional[float]:
         return default
 
 
-def safe_int(val: Any, default: Optional[int] = None) -> Optional[int]:
+def safe_int(val: Any, default: int | None = None) -> int | None:
     """Coerce to int, returning ``default`` for unparseable input."""
     f = safe_float(val, default=None)
     if f is None:
@@ -116,9 +116,9 @@ def safe_int(val: Any, default: Optional[int] = None) -> Optional[int]:
 
 def get_sensor_value_simple(
         name: str,
-        data: Dict[str, Any],
-        device_data: Dict[str, Any]
-) -> Optional[str]:
+        data: dict[str, Any],
+        device_data: dict[str, Any]
+) -> str | None:
     keys = SENSOR_KEYS_MAP.get(name, [])
 
     for key in keys:
@@ -134,8 +134,8 @@ def get_sensor_value_simple(
 
 def get_sensor_value_simple_entry(
         name: str,
-        data: Dict[str, Any],
-        device_data: Dict[str, Any]
+        data: dict[str, Any],
+        device_data: dict[str, Any]
 ) -> tuple[str, Any, Any] | None:
     """
     Ищет значение сенсора по ключам из SENSOR_KEYS_MAP[name].
@@ -156,9 +156,9 @@ def get_sensor_value_simple_entry(
 
 async def set_inverter_output_priority(
     client: DessmonitorClient,
-    device_data: Dict[str, Any],
+    device_data: dict[str, Any],
     value: str,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     match device_data['devcode']:
         case 2341:
             map_param_value = {'Utility': '0', 'Solar': '1', 'SBU': '2', 'SUB': '3'}
@@ -187,8 +187,8 @@ async def set_inverter_output_priority(
 
 async def get_inverter_output_priority(
     client: DessmonitorClient,
-    device_data: Dict[str, Any],
-) -> Optional[str]:
+    device_data: dict[str, Any],
+) -> str | None:
     match device_data['devcode']:
         case 2341:
             map_param_value = {
