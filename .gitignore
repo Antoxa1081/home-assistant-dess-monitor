@@ -3,3 +3,18 @@
 config
 docker-compose.yml
 tests/test-api.py
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local diagnostics dumps
+dess_monitor-*.json
