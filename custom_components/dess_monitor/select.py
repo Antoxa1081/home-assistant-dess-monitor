@@ -67,7 +67,6 @@ async def async_setup_entry(
             continue
         # print(config_entry.data)
         if config_entry.options.get('dynamic_settings', False) is True:
-            print("Setting up dynamic_settings")
             async_add_entities(list(
                 map(
                     lambda field_data: InverterDynamicSettingSelect(item, coordinator, field_data),

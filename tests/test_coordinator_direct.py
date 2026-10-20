@@ -19,7 +19,7 @@ from custom_components.dess_monitor.coordinators.direct_coordinator import (
     DirectCoordinator,
 )
 from custom_components.dess_monitor.device_cache import DeviceCache
-from custom_components.dess_monitor.sdk import AuthError, TransportError
+from custom_components.dess_monitor.sdk import ApiError, AuthError, TransportError
 
 
 def _device(pn="PN1", sn="SN1", devcode=2376, devaddr=1, status=0, uid="u1"):
@@ -46,6 +46,21 @@ class FakeService:
         if command in self.replies:
             return self.replies[command]
         return self.default
+
+
+class FailingService(FakeService):
+    """Raises ``errors[(pn, command)]`` for the listed calls."""
+
+    def __init__(self, errors, **kwargs):
+        super().__init__(**kwargs)
+        self.errors = errors
+
+    async def query(self, device, command):
+        err = self.errors.get((device["pn"], command))
+        if err is not None:
+            self.calls.append((device["pn"], command))
+            raise err
+        return await super().query(device, command)
 
 
 def _make_client(devices=None):
@@ -304,3 +319,64 @@ class TestAsyncUpdateData:
         with pytest.raises(UpdateFailed):
             await coord._async_update_data()
         assert client.session.invalidate.await_count == 0
+
+    async def test_api_error_on_one_device_keeps_others(self, hass):
+        # Issue #90: one inverter's ERR_TIMEOUT must not blank the whole fleet.
+        devices = [_device(pn="A"), _device(pn="B")]
+        service = FailingService(
+            {("A", "QPIGS"): ApiError("ERR_TIMEOUT", code=2)},
+            default={"v": 1},
+        )
+        coord, *_ = _make_coordinator(
+            hass, devices=devices,
+            options={"direct_request_protocol": True}, service=service,
+        )
+        data = await coord._async_update_data()
+        assert data["A"] == {"qpigs": {}, "qpigs2": {"v": 1}, "qpiri": {"v": 1}}
+        assert data["B"] == {"qpigs": {"v": 1}, "qpigs2": {"v": 1}, "qpiri": {"v": 1}}
+
+    async def test_transport_error_on_one_command_blanks_its_sections(self, hass):
+        service = FailingService(
+            {("PN1", "QPIGS"): TransportError("timeout")},
+            replies={"QPIRI": {"rated": 1}},
+        )
+        coord, *_ = _make_coordinator(
+            hass,
+            options={"direct_request_protocol": True, "direct_protocol": "pi18"},
+            service=service,
+        )
+        data = await coord._async_update_data()
+        # QPIGS (GS on the wire) feeds both qpigs and qpigs2 — both blank, qpiri still decoded.
+        assert data["PN1"]["qpigs"] == {}
+        assert data["PN1"]["qpigs2"] == {}
+        assert data["PN1"]["qpiri"] == {"rated": 1}
+
+    async def test_all_commands_failing_raises_update_failed(self, hass):
+        err = ApiError("ERR_TIMEOUT", code=2)
+        service = FailingService({
+            ("PN1", "QPIGS"): err, ("PN1", "QPIGS2"): err, ("PN1", "QPIRI"): err,
+        })
+        coord, *_ = _make_coordinator(
+            hass, options={"direct_request_protocol": True}, service=service,
+        )
+        with pytest.raises(UpdateFailed):
+            await coord._async_update_data()
+
+    async def test_auth_error_from_query_still_invalidates(self, hass):
+        service = FailingService({("PN1", "QPIGS"): AuthError("err=10", code=10)})
+        coord, _, client, _ = _make_coordinator(
+            hass, options={"direct_request_protocol": True}, service=service,
+        )
+        with pytest.raises(UpdateFailed):
+            await coord._async_update_data()
+        assert client.session.invalidate.await_count == 1
+
+    async def test_top_level_api_error_becomes_update_failed(self, hass):
+        client = _make_client()
+        client.devices.list = AsyncMock(side_effect=ApiError("err=6000", code=6000))
+        coord, *_ = _make_coordinator(
+            hass, options={"direct_request_protocol": True},
+            service=FakeService(), client=client,
+        )
+        with pytest.raises(UpdateFailed):
+            await coord._async_update_data()

@@ -28,7 +28,12 @@ from custom_components.dess_monitor.const import (
 )
 from custom_components.dess_monitor.coordinators.coordinator import _clamp
 from custom_components.dess_monitor.device_cache import DeviceCache
-from custom_components.dess_monitor.sdk import AuthError, DessmonitorClient, TransportError
+from custom_components.dess_monitor.sdk import (
+    ApiError,
+    AuthError,
+    DessmonitorClient,
+    TransportError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -163,7 +168,11 @@ class DirectCoordinator(DataUpdateCoordinator):
 
                 self.devices = await self.get_active_devices()
 
+                failed_commands = 0
+                total_commands = 0
+
                 async def fetch_device_data(device: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+                    nonlocal failed_commands, total_commands
                     # Group sections by command so a protocol like PI18 — where
                     # one GS reply carries both qpigs and qpigs2 data — only
                     # makes one cloud round-trip. When several sections share a
@@ -176,7 +185,26 @@ class DirectCoordinator(DataUpdateCoordinator):
 
                     sections: dict[str, Any] = {}
                     for command, target_sections in cmd_to_sections.items():
-                        result = await self._service.query(device, command)
+                        total_commands += 1
+                        try:
+                            result = await self._service.query(device, command)
+                        except AuthError:
+                            raise
+                        except (ApiError, TransportError) as err:
+                            # One inverter timing out (err=2 ERR_TIMEOUT on
+                            # sendCmdToDevice, issue #90) must not take down
+                            # the other devices or the other sections of this
+                            # one. Blank only the affected sections so their
+                            # sensors go unknown instead of freezing on stale
+                            # values.
+                            failed_commands += 1
+                            _LOGGER.warning(
+                                "Direct %s failed for %s: %s",
+                                command, device.get("pn"), err,
+                            )
+                            for section in target_sections:
+                                sections[section] = {}
+                            continue
                         if len(target_sections) == 1:
                             sections[target_sections[0]] = result
                             continue
@@ -186,6 +214,10 @@ class DirectCoordinator(DataUpdateCoordinator):
                     return device['pn'], sections
 
                 results = await asyncio.gather(*map(fetch_device_data, self.devices))
+                if total_commands and failed_commands == total_commands:
+                    raise UpdateFailed(
+                        f"DESS direct: all {total_commands} commands failed"
+                    )
                 return dict(results)
         except TimeoutError:
             raise
@@ -196,3 +228,7 @@ class DirectCoordinator(DataUpdateCoordinator):
             # Wrap as UpdateFailed so HA logs a single WARNING line instead
             # of the full aiohttp + SDK traceback every time the cloud blips.
             raise UpdateFailed(f"DESS cloud transient: {err}") from err
+        except ApiError as err:
+            # Top-level call (e.g. ``get_active_devices``) failed with a
+            # non-auth envelope error — same treatment as the main coordinator.
+            raise UpdateFailed(f"DESS cloud API error: {err}") from err
