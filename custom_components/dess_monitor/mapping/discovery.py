@@ -12,6 +12,7 @@ implementation; tests and standalone scripts use :class:`InMemoryMappingStorage`
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from typing import Any
 
@@ -28,7 +29,26 @@ from .storage import MappingStorage
 
 _LOGGER = logging.getLogger(__name__)
 
-_SNAPSHOT_VERSION = 2  # bump invalidates v1 pins (issue #88: pars-block stale binding)
+_SNAPSHOT_SCHEMA = 2  # bump invalidates v1 pins (issue #88: pars-block stale binding)
+
+
+def _seed_fingerprint() -> str:
+    """Short hash of candidate order per canonical metric.
+
+    Pins are restored across restarts, so a reordered or extended seed would
+    never reach installs that already pinned a lower-priority candidate (e.g.
+    devcode 6515 pinned ``pv_power`` to the PV total before its PV1 key was
+    added, issue #95). Folding the seed into the snapshot version makes any
+    seed change re-run discovery once.
+    """
+    parts = [
+        f"{name}:" + ",".join(f"{c.match_field}/{c.provider_key}" for c in cands)
+        for name, cands in sorted(CANONICAL_METRICS.items())
+    ]
+    return hashlib.sha1("\n".join(parts).encode()).hexdigest()[:12]
+
+
+_SNAPSHOT_VERSION = f"{_SNAPSHOT_SCHEMA}-{_seed_fingerprint()}"
 
 
 class MappingDiscovery:
@@ -184,10 +204,17 @@ class MappingDiscovery:
         if cand.value_map is not None:
             raw_str = raw_val if isinstance(raw_val, str) else str(raw_val)
             return cand.value_map.get(raw_str.lower())
+        unit = item.get("unit")
+        if cand.unit_hint is not None and isinstance(unit, str) and unit:
+            # Generic keys like ``eybond_read_46`` mean different things on
+            # different firmwares; the unit guards against pinning a
+            # same-named field of another quantity. kW is W after scaling.
+            normalised = "W" if unit == "kW" else unit
+            if normalised.lower() != cand.unit_hint.lower():
+                return None
         val = safe_float(raw_val, default=None)
         if val is None:
             return None
-        unit = item.get("unit")
         if isinstance(unit, str) and unit == "kW":
             val *= 1000.0
         val = val * cand.scale + cand.offset

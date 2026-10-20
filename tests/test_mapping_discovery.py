@@ -429,3 +429,89 @@ class TestSnapshot:
     def test_empty_snapshot(self):
         snap = disc()._snapshot_locked()
         assert snap == {"version": _SNAPSHOT_VERSION, "devices": {}}
+
+
+# --------------------------------------------------------------------------- #
+# unit_hint guard + devcode 6515 (issue #95)
+# --------------------------------------------------------------------------- #
+class TestUnitHint:
+    def _with_candidate(self, monkeypatch, cand):
+        from custom_components.dess_monitor.mapping import discovery as mod
+        monkeypatch.setitem(mod.CANONICAL_METRICS, "probe", [cand])
+
+    def test_matching_unit_accepted(self, monkeypatch):
+        self._with_candidate(monkeypatch, ProviderKeyCandidate(
+            "eybond_read_46", MATCH_FIELD_PAR, unit_hint="V"))
+        data = {"pars": {"parameter": [par_item("eybond_read_46", "113.5", unit="V")]}}
+        assert disc().resolve(PN, "probe", data) == pytest.approx(113.5)
+
+    def test_mismatched_unit_rejected(self, monkeypatch):
+        self._with_candidate(monkeypatch, ProviderKeyCandidate(
+            "eybond_read_46", MATCH_FIELD_PAR, unit_hint="V"))
+        data = {"pars": {"parameter": [par_item("eybond_read_46", "12", unit="A")]}}
+        assert disc().resolve(PN, "probe", data) is None
+
+    def test_kw_counts_as_w(self, monkeypatch):
+        self._with_candidate(monkeypatch, ProviderKeyCandidate(
+            "eybond_read_48", MATCH_FIELD_PAR, unit_hint="W"))
+        data = {"pars": {"parameter": [par_item("eybond_read_48", "0.514", unit="kW")]}}
+        assert disc().resolve(PN, "probe", data) == pytest.approx(514.0)
+
+    def test_missing_unit_accepted(self, monkeypatch):
+        self._with_candidate(monkeypatch, ProviderKeyCandidate(
+            "eybond_read_48", MATCH_FIELD_PAR, unit_hint="W"))
+        data = {"pars": {"parameter": [par_item("eybond_read_48", "514")]}}
+        assert disc().resolve(PN, "probe", data) == pytest.approx(514.0)
+
+
+def _devcode_6515_payload():
+    """Trimmed from the sanitized diagnostics attached to issue #95."""
+    return {
+        "last_data": {"pars": {
+            "pv_": [{"id": "pv_output_power", "par": "Total PV Power",
+                     "val": "1027", "unit": "W"}],
+            "bt_": [{"id": "bt_battery_capacity", "par": "SOC",
+                     "val": "64", "unit": "%"}],
+        }},
+        "pars": {"parameter": [
+            {"par": "eybond_read_24", "name": "Battery Voltage", "val": "50.7", "unit": "V"},
+            {"par": "eybond_read_43", "name": "PV1 Voltage", "val": "174.9", "unit": "V"},
+            {"par": "eybond_read_45", "name": "PV1 Power", "val": "624", "unit": "W"},
+            {"par": "eybond_read_46", "name": "PV2 Voltage", "val": "113.5", "unit": "V"},
+            {"par": "eybond_read_48", "name": "PV2 Power", "val": "514", "unit": "W"},
+            {"par": "pv_output_power", "name": "Total PV Power", "val": "1144", "unit": "W"},
+        ]},
+    }
+
+
+class TestDevcode6515:
+    @pytest.mark.parametrize(("canonical", "expected"), [
+        ("battery_voltage", 50.7),
+        ("pv_voltage", 174.9),
+        ("pv_power", 624.0),       # PV1 leg, not the 1027 W total
+        ("pv2_voltage", 113.5),
+        ("pv2_power", 514.0),
+        ("pv_total_power", 1027.0),  # live last_data wins over cached pars
+    ])
+    def test_resolves(self, canonical, expected):
+        assert disc().resolve(PN, canonical, _devcode_6515_payload()) == pytest.approx(expected)
+
+
+class TestSeedFingerprint:
+    def test_version_embeds_seed_hash(self):
+        schema, _, fingerprint = str(_SNAPSHOT_VERSION).partition("-")
+        assert schema == "2"
+        assert len(fingerprint) == 12
+
+    async def test_pins_from_previous_seed_are_dropped(self):
+        storage = InMemoryMappingStorage()
+        storage.save = AsyncMock()
+        storage.load = AsyncMock(return_value={
+            "version": "2-000000000000",
+            "devices": {PN: {"pv_power": {
+                "provider_key": "pv_output_power", "match_field": "id"}}},
+        })
+        d = disc(storage)
+        await d.async_load()
+        assert d.discovered_provider_key(PN, "pv_power") is None
+        assert d.resolve(PN, "pv_power", _devcode_6515_payload()) == pytest.approx(624.0)

@@ -304,6 +304,8 @@ CANONICAL_METRICS: dict[str, list[ProviderKeyCandidate]] = {
         # Anenji 11kw (devcode 6544) — eybond explicit PV1 power.
         ProviderKeyCandidate("eybond_read_43972", MATCH_FIELD_ID),
         ProviderKeyCandidate("eybond_read_43972", MATCH_FIELD_PAR),
+        # Anenji HHS 11kW (devcode 6515) — PV1 Power, pars block only.
+        ProviderKeyCandidate("eybond_read_45", MATCH_FIELD_PAR, unit_hint="W"),
         ProviderKeyCandidate("bt_input_power", MATCH_FIELD_ID),
         ProviderKeyCandidate("bt_input_power", MATCH_FIELD_PAR),
         # Single-MPPT fallback — total ≈ PV1 when no PV2 leg exists.
@@ -360,6 +362,8 @@ CANONICAL_METRICS: dict[str, list[ProviderKeyCandidate]] = {
         # Anenji 11kw (devcode 6544) — eybond explicit PV2 power.
         ProviderKeyCandidate("eybond_read_43975", MATCH_FIELD_ID),
         ProviderKeyCandidate("eybond_read_43975", MATCH_FIELD_PAR),
+        # Anenji HHS 11kW (devcode 6515) — PV2 Power, pars block only.
+        ProviderKeyCandidate("eybond_read_48", MATCH_FIELD_PAR, unit_hint="W"),
         # MiC 6.2 (devcode 6416) — PV2 input power lives under a generic
         # "eybond_read_2" alias on this firmware.
         ProviderKeyCandidate("eybond_read_2", MATCH_FIELD_ID),
@@ -375,6 +379,8 @@ CANONICAL_METRICS: dict[str, list[ProviderKeyCandidate]] = {
         # Anenji 11kw (devcode 6544).
         ProviderKeyCandidate("eybond_read_43973", MATCH_FIELD_ID),
         ProviderKeyCandidate("eybond_read_43973", MATCH_FIELD_PAR),
+        # Anenji HHS 11kW (devcode 6515) — PV2 Voltage, pars block only.
+        ProviderKeyCandidate("eybond_read_46", MATCH_FIELD_PAR, unit_hint="V"),
         # Stevo Hybrid Monster (devcode 6467) — counterintuitive: id
         # `pv_voltage_1` is the PV2 string.
         ProviderKeyCandidate("pv_voltage_1", MATCH_FIELD_ID),
