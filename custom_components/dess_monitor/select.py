@@ -1,31 +1,30 @@
-import asyncio
 import logging
 import random
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 
 import async_timeout
 from homeassistant.components.select import SelectEntity
-from homeassistant.const import EntityCategory, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN, EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from custom_components.dess_monitor import MainCoordinator, HubConfigEntry
+from custom_components.dess_monitor import HubConfigEntry, MainCoordinator
 from custom_components.dess_monitor.api.helpers import set_inverter_output_priority
 from custom_components.dess_monitor.api.resolvers.data_resolvers import resolve_output_priority
 from custom_components.dess_monitor.const import (
-    DOMAIN,
-    CONF_DYNAMIC_SETTINGS_INTERVAL,
-    DEFAULT_DYNAMIC_SETTINGS_INTERVAL,
-    MIN_DYNAMIC_SETTINGS_INTERVAL,
-    MAX_DYNAMIC_SETTINGS_INTERVAL,
-    DYNAMIC_SETTINGS_API_TIMEOUT,
     BATTERY_CHEMISTRIES,
-    DEFAULT_BATTERY_CHEMISTRY,
     CONF_BATTERY_VIRTUAL_ENABLED,
+    CONF_DYNAMIC_SETTINGS_INTERVAL,
+    DEFAULT_BATTERY_CHEMISTRY,
     DEFAULT_BATTERY_VIRTUAL_ENABLED,
+    DEFAULT_DYNAMIC_SETTINGS_INTERVAL,
+    DOMAIN,
+    DYNAMIC_SETTINGS_API_TIMEOUT,
+    MAX_DYNAMIC_SETTINGS_INTERVAL,
+    MIN_DYNAMIC_SETTINGS_INTERVAL,
 )
 from custom_components.dess_monitor.coordinators.coordinator import _clamp
 from custom_components.dess_monitor.hub import InverterDevice
@@ -242,7 +241,7 @@ class InverterDynamicSettingSelect(SelectBase, RestoreEntity):
                     DeviceIdentity.from_dict(self._inverter_device.device_data),
                     self._service_param_id,
                 )
-        except (asyncio.TimeoutError, Exception) as err:
+        except (TimeoutError, Exception) as err:
             _LOGGER.debug(
                 "Skipping update of %s: %s", self._attr_unique_id, err,
             )

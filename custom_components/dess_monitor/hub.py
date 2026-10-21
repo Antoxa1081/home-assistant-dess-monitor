@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional, Union
+from typing import Any
 
 from homeassistant.core import HomeAssistant
 
@@ -65,7 +65,7 @@ class InverterDevice:
         self.name = name
         self.firmware_version = "0.0.1"
         self.model = "DESS Device"
-        self.virtual_battery: Optional[VirtualBatteryEstimator] = None
+        self.virtual_battery: VirtualBatteryEstimator | None = None
 
     @property
     def inverter_id(self) -> str:
@@ -78,6 +78,6 @@ class InverterDevice:
             return False
         return True
 
-    def resolve(self, canonical_name: str, data: dict[str, Any]) -> Optional[Union[float, str]]:
+    def resolve(self, canonical_name: str, data: dict[str, Any]) -> float | str | None:
         """Look up a canonical metric in this device's tick data."""
         return self.hub.mapping.resolve(self._id, canonical_name, data)

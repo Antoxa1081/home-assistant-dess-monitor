@@ -6,7 +6,8 @@ strictly an artefact of this transport — protocol code never sees it.
 """
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from custom_components.dess_monitor.sdk import DessmonitorClient
 from custom_components.dess_monitor.sdk.models import DeviceIdentity

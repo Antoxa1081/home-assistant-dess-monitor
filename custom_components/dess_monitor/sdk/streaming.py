@@ -17,9 +17,10 @@ import json
 import logging
 import time
 import urllib.parse
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from types import TracebackType
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiohttp
 
@@ -97,7 +98,7 @@ class DeviceStream:
         qs = urllib.parse.urlencode(self._identity.as_params())
         return f"wss://{self._base_host}{self._ws_path}?{qs}"
 
-    async def __aenter__(self) -> "DeviceStream":
+    async def __aenter__(self) -> DeviceStream:
         await self.start()
         return self
 
@@ -169,7 +170,7 @@ class DeviceStream:
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=delay)
                 break
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
 
     async def _connect_and_consume(self) -> None:

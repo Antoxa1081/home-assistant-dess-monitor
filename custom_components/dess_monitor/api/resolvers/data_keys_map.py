@@ -1,6 +1,5 @@
-from typing import Dict
 
-SENSOR_KEYS_MAP: Dict[str, list[str]] = {
+SENSOR_KEYS_MAP: dict[str, list[str]] = {
     "battery_charging_current": [
         "bt_eybond_read_29",
         "bt_battery_charging_current",
@@ -92,14 +91,26 @@ SENSOR_KEYS_MAP: Dict[str, list[str]] = {
     "pv2_power": [
         "bt_input_power_1",
         "PV2 Charging power",
+        "PV2 input power",
+        "PV2 Charging Power",
+        "PV2 Input Power",
+        "eybond_read_43975",
+        "eybond_read_2",
     ],
     "pv2_voltage": [
         "bt_voltage_2",
         "PV2 Input voltage",
+        "PV2 Voltage",
+        "PV2 Input Voltage",
+        "eybond_read_43973",
+        "pv_voltage_1",
     ],
     "pv2_input_current": [
         "pv_input_current2",
         "PV2 Input current",
+        "PV2 Input Current",
+        "PV2 Current",
+        "pv_input_current_2",
     ],
     "grid_input_voltage": [
         "gd_ac_input_voltage",

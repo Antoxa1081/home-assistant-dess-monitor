@@ -1,0 +1,65 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 110
+# Ad-hoc bench/probe scripts at the repo root aren't part of the integration
+# and don't need to pass lint.
+extend-exclude = [
+    "test-anern-local.py",
+    "test-smg2-local.py",
+    "test-ws-ess.py",
+    "tests/test_protocols_smoke.py",
+    "tests/test-api.py",
+    "tests/test.py",
+    # Ad-hoc Modbus probe scripts — not imported by the integration.
+    "custom_components/dess_monitor/api/commands/",
+]
+
+[tool.ruff.lint]
+# Sensible default rule set: pyflakes (F) + pycodestyle errors (E) +
+# warnings (W) + isort (I) + bugbear (B) + pyupgrade (UP).
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",  # line length handled by formatter, not enforced hard
+    "B008",  # function calls in argument defaults (HA selectors use this)
+    # zip() truncation in the decoders is DELIBERATE — short inverter frames
+    # must be tolerated, not raise. strict=True would defeat that.
+    "B905",
+    # The sensor platform aggregates its entity classes via ``from .sensors.* import *``
+    # — an intentional, established pattern here. Don't fight the star imports.
+    "F403",
+    "F405",
+    # HA platform modules legitimately import after a module-level guard / star
+    # re-export block.
+    "E402",
+    # PEP 695 generics (``class Foo[T]`` / ``def f[T]``) are a style migration,
+    # not a correctness issue; leave the explicit ``Generic[T]`` form as-is.
+    "UP046",
+    "UP047",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests deliberately import the package via sys.modules stubs (E402) and assert
+# that broad exceptions are raised (B017).
+"tests/*" = ["E402", "B017"]
+
+[tool.coverage.run]
+source = ["custom_components/dess_monitor"]
+branch = true
+omit = [
+    "*/__pycache__/*",
+    # Legacy flat protocol modules — shadowed by same-named packages, never imported.
+    "custom_components/dess_monitor/api/protocols/axpert.py",
+    "custom_components/dess_monitor/api/protocols/pi18.py",
+    "custom_components/dess_monitor/api/protocols/smg2_modbus.py",
+    "custom_components/dess_monitor/api/protocols/axpert_set.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "\\.\\.\\.",
+]

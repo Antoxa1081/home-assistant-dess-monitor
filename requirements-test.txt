@@ -1,0 +1,22 @@
+# Test dependencies.
+#
+# Two tiers, mirroring the CI split in .github/workflows/tests.yml:
+#
+#   * Pure-logic matrix (3.12/3.13): needs only pytest + pytest-cov +
+#     pytest-asyncio + aiohttp. tests/conftest.py stubs the package parents so
+#     the HA-free modules import standalone, and the HA-dependent test files
+#     self-skip via pytest.importorskip("homeassistant").
+#
+#   * hass job (Linux): installs THIS file. pytest-homeassistant-custom-component
+#     pulls a pinned Home Assistant and provides the `hass` fixture for the
+#     integration-layer tests. It is POSIX-only (imports fcntl) and, on Windows
+#     dev boxes, the conftest works around its socket/event-loop guards.
+#
+# Pin note: phacc pins an exact HA version. 0.13.221 matches homeassistant==2025.3.0
+# (this repo's target). Install with the HA version held constant if needed:
+#   pip install -c <(echo "homeassistant==2025.3.0") -r requirements-test.txt
+pytest
+pytest-cov
+pytest-asyncio
+aiohttp
+pytest-homeassistant-custom-component==0.13.221

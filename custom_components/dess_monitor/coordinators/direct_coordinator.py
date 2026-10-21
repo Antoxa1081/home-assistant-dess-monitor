@@ -23,8 +23,8 @@ from custom_components.dess_monitor.const import (
     DEFAULT_DIRECT_UPDATE_INTERVAL,
     DIRECT_PROTOCOL_PI18,
     DIRECT_PROTOCOL_SMG2,
-    MIN_DIRECT_UPDATE_INTERVAL,
     MAX_DIRECT_UPDATE_INTERVAL,
+    MIN_DIRECT_UPDATE_INTERVAL,
 )
 from custom_components.dess_monitor.coordinators.coordinator import _clamp
 from custom_components.dess_monitor.device_cache import DeviceCache
