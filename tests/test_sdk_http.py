@@ -248,6 +248,20 @@ class TestTransportErrors:
         assert ei.value.action == "act"
         assert "transport failed" in str(ei.value)
 
+    async def test_client_error_does_not_leak_query_string(self) -> None:
+        # aiohttp error texts carry the full URL, including sign / salt / token.
+        exc = aiohttp.ClientError(
+            "Connection timeout to host "
+            "https://web.dessmonitor.com/public/?sign=abc&salt=1&token=SECRET&action=act"
+        )
+        client, _ = _client_with(get_exc=exc)
+        with pytest.raises(errors.TransportError) as ei:
+            await client.authenticated_request("act", token="t", secret="s")
+        message = str(ei.value)
+        assert "SECRET" not in message
+        assert "sign=" not in message
+        assert "web.dessmonitor.com/public/?<redacted>" in message
+
     async def test_timeout_wrapped(self) -> None:
         client, _ = _client_with(get_exc=TimeoutError())
         with pytest.raises(errors.TransportError) as ei:
