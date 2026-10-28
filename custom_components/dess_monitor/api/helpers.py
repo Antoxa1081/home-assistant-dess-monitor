@@ -171,6 +171,16 @@ async def set_inverter_output_priority(
                 'SUB': '12339',
             }
             param_id = 'bse_output_source_priority'
+        case 2449:
+            # PowMr on DESS/SmartESS: same bse_ register and key encoding as
+            # 2428 (ASCII "00"/"01"/"02" packed into 16 bits). The 2449 field
+            # lists only 12336-12338, so there is no SUB.
+            map_param_value = {
+                'Utility': '12336',
+                'Solar': '12337',
+                'SBU': '12338',
+            }
+            param_id = 'bse_output_source_priority'
         case 2376:
             map_param_value = {'Utility': '0', 'Solar': '1', 'SBU': '2', 'SUB': '3'}
             param_id = 'bse_eybond_ctrl_49'
@@ -213,6 +223,21 @@ async def get_inverter_output_priority(
                 'SBU first': 'SBU',
                 'SUB': 'SUB',
                 'SUB first': 'SUB',
+                None: None,
+            }
+            param_id = 'bse_output_source_priority'
+        case 2449:
+            # 2449 reports the ctrl value as a source-order label.
+            map_param_value = {
+                'Utility first': 'Utility',
+                'Utility': 'Utility',
+                'Utility Solar Bat': 'Utility',
+                'Solar first': 'Solar',
+                'Solar': 'Solar',
+                'Solar Utility Bat': 'Solar',  # label from the device's ctrl-field list (12337)
+                'SBU': 'SBU',
+                'SBU first': 'SBU',
+                'Solar Bat Utility': 'SBU',
                 None: None,
             }
             param_id = 'bse_output_source_priority'

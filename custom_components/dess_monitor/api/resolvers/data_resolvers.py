@@ -219,7 +219,19 @@ def resolve_active_load_percentage(data, inverter_device):
     return _resolve(inverter_device, "active_load_percentage", data)
 
 
+_OUTPUT_PRIORITY_OPTIONS = ("Utility", "Solar", "SBU", "SUB")
+
+
 def resolve_output_priority(data, inverter_device):
+    # Prefer the ctrl-value readback the coordinator stores in
+    # ``device_extra`` (get_inverter_output_priority): it reads the same
+    # register the select writes, is cached 5 min and invalidated on write,
+    # whereas a mapping pin on the ``pars`` block can lag up to an hour.
+    # Only an already-normalised string is accepted (never a dict).
+    extra = data.get("device_extra") if isinstance(data, dict) else None
+    ctrl_val = extra.get("output_priority") if isinstance(extra, dict) else None
+    if isinstance(ctrl_val, str) and ctrl_val in _OUTPUT_PRIORITY_OPTIONS:
+        return ctrl_val
     return _resolve(inverter_device, "output_priority", data)
 
 

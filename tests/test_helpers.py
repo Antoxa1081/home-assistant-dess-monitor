@@ -228,6 +228,34 @@ class TestAsyncControlHelpers:
         result = await get_inverter_output_priority(client, {"devcode": 2341})
         assert result == "Solar"
 
+    async def test_set_output_priority_devcode_2449(self, monkeypatch):
+        client = MagicMock()
+        client.control.set_param = AsyncMock(return_value={"ok": True})
+        monkeypatch.setattr(helpers.DeviceIdentity, "from_dict", staticmethod(lambda d: d))
+
+        device = {"devcode": 2449}
+        await set_inverter_output_priority(client, device, "SBU")
+        client.control.set_param.assert_awaited_once_with(
+            device, "bse_output_source_priority", "12338",
+        )
+
+    async def test_set_output_priority_devcode_2449_has_no_sub(self):
+        client = MagicMock()
+        client.control.set_param = AsyncMock()
+        result = await set_inverter_output_priority(client, {"devcode": 2449}, "SUB")
+        assert result is None
+        client.control.set_param.assert_not_awaited()
+
+    @pytest.mark.parametrize(
+        "label,expected",
+        [("Utility Solar Bat", "Utility"), ("Solar Utility Bat", "Solar"), ("Solar Bat Utility", "SBU")],
+    )
+    async def test_get_output_priority_devcode_2449(self, monkeypatch, label, expected):
+        client = MagicMock()
+        client.control.get_value = AsyncMock(return_value={"val": label})
+        monkeypatch.setattr(helpers.DeviceIdentity, "from_dict", staticmethod(lambda d: d))
+        assert await get_inverter_output_priority(client, {"devcode": 2449}) == expected
+
     async def test_get_output_priority_unknown_devcode(self):
         client = MagicMock()
         result = await get_inverter_output_priority(client, {"devcode": 9999})

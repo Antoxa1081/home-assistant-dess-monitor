@@ -135,7 +135,11 @@ class InverterOutputPrioritySelect(SelectBase, RestoreEntity):
         super().__init__(inverter_device, coordinator)
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_output_priority"
         self._attr_name = f"{self._inverter_device.name} Output Priority"
-        self._attr_options = ['Utility', 'Solar', 'SBU', 'SUB']
+        # PowMr devcode 2449 has no SUB in its bse_output_source_priority field.
+        if self._inverter_device.device_data.get('devcode') == 2449:
+            self._attr_options = ['Utility', 'Solar', 'SBU']
+        else:
+            self._attr_options = ['Utility', 'Solar', 'SBU', 'SUB']
 
         if coordinator.data is not None:
             data = coordinator.data.get(self._inverter_device.inverter_id)
