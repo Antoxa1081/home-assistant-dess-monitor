@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Mapping
 from types import TracebackType
 from typing import Any, Literal
@@ -11,6 +12,9 @@ import aiohttp
 from . import errors, signing
 
 _LOGGER = logging.getLogger(__name__)
+
+# Query string of a URL inside an error message.
+_QUERY_RE = re.compile(r"\?\S*")
 
 DEFAULT_BASE_HOST = "web.dessmonitor.com"
 DEFAULT_COMPANY_KEY = "bnrl_frRFjEz8Mkn"
@@ -127,7 +131,10 @@ class HttpClient:
                             action=action,
                         ) from exc
             except aiohttp.ClientError as exc:
-                raise errors.TransportError(f"HTTP transport failed: {exc}", action=action) from exc
+                # aiohttp puts the full request URL (sign, salt, session token)
+                # into the message, which ends up in the HA log: drop the query.
+                safe = _QUERY_RE.sub("?<redacted>", str(exc))
+                raise errors.TransportError(f"HTTP transport failed: {safe}", action=action) from exc
             except TimeoutError as exc:
                 raise errors.TransportError("HTTP request timed out", action=action) from exc
 
