@@ -37,6 +37,9 @@ from custom_components.dess_monitor.sdk import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Upper bound for one sendCmdToDevice round-trip (SDK HTTP timeout is 15 s).
+_PER_COMMAND_BUDGET = 15
+
 
 # Poll plans per protocol. Sensors read by *section name* (``qpigs``/``qpiri``/
 # ``qpigs2``), insulated from which underlying command produced the data.
@@ -99,7 +102,7 @@ class DirectCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=interval_seconds),
             always_update=False,
         )
-        self._update_timeout = max(interval_seconds, 30)
+        self._interval_seconds = interval_seconds
         self._client = client
         self._device_cache = device_cache
 
@@ -133,6 +136,13 @@ class DirectCoordinator(DataUpdateCoordinator):
         self._service = service
         self._binding = binding or default_binding
         self._protocol_name = protocol_name
+        # Commands per device run sequentially, each bounded by the SDK's
+        # 15 s HTTP timeout; a flat 30 s budget cut the third command off
+        # ("Finished fetching ... in 30.011 seconds", issue #90).
+        commands = len(set(self._binding.sections.values())) or 1
+        self._update_timeout = max(
+            self._interval_seconds, _PER_COMMAND_BUDGET * commands + 5,
+        )
 
     @property
     def client(self) -> DessmonitorClient:

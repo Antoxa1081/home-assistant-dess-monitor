@@ -380,3 +380,20 @@ class TestAsyncUpdateData:
         )
         with pytest.raises(UpdateFailed):
             await coord._async_update_data()
+
+
+class TestUpdateTimeoutBudget:
+    async def test_budget_covers_sequential_commands(self, hass):
+        # Axpert: QPIGS + QPIGS2 + QPIRI run one after another (issue #90).
+        coord, *_ = _make_coordinator(
+            hass, options={"direct_request_protocol": True}, service=FakeService(),
+        )
+        assert coord._update_timeout >= 15 * 3
+
+    async def test_pi18_shares_one_command_for_two_sections(self, hass):
+        coord, *_ = _make_coordinator(
+            hass,
+            options={"direct_request_protocol": True, "direct_protocol": "pi18"},
+            service=FakeService(),
+        )
+        assert coord._update_timeout == max(coord._interval_seconds, 15 * 2 + 5)

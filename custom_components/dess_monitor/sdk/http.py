@@ -106,7 +106,11 @@ class HttpClient:
         session = await self._get_session()
         async with self._semaphore:
             try:
-                async with session.get(url, headers=self._headers) as resp:
+                # Pass the timeout per request: an injected session (HA shares
+                # one) keeps its own default of 300 s otherwise.
+                async with session.get(
+                    url, headers=self._headers, timeout=self._timeout,
+                ) as resp:
                     # The cloud's upstream balancer occasionally returns
                     # 502/503/504 with an HTML body — parsing that as JSON
                     # would raise json.JSONDecodeError (a ValueError, NOT

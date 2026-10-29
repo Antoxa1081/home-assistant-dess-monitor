@@ -223,10 +223,11 @@ class TestShouldAddDirectSensors:
         hub = SimpleNamespace(direct_coordinator=_make_coordinator({"PN1": {}}))
         assert should_add_direct_sensors(self._entry(False), hub, item) is False
 
-    def test_false_when_no_data(self):
+    def test_true_when_enabled_without_data(self):
+        # A failed first direct refresh must not drop the entities.
         item = _make_item("PN1")
         hub = SimpleNamespace(direct_coordinator=_make_coordinator(None))
-        assert should_add_direct_sensors(self._entry(True), hub, item) is False
+        assert should_add_direct_sensors(self._entry(True), hub, item) is True
 
 
 class TestCreateDirectSensors:

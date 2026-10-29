@@ -138,6 +138,14 @@ class TestPublicRequest:
         dat = await client.public_request("authSource", {"usr": "bob"}, password_hash="ph")
         assert dat == {"token": "T"}
 
+    async def test_timeout_passed_per_request(self) -> None:
+        # HA's shared session defaults to 300 s; ours must apply per call.
+        resp = _FakeResponse(json_value={"err": 0, "dat": {}})
+        client, session = _client_with(resp)
+        await client.public_request("authSource", {"usr": "bob"}, password_hash="ph")
+        (_args, kwargs) = session.get_calls[0]
+        assert kwargs["timeout"].total == 15
+
     async def test_signs_and_targets_public_endpoint(self) -> None:
         resp = _FakeResponse(json_value={"err": 0, "dat": {}})
         client, session = _client_with(resp)

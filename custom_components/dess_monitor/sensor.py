@@ -160,11 +160,10 @@ def create_dynamic_sensors(item, coordinator):
 
 
 def should_add_direct_sensors(config_entry, hub, item):
-    return (
-            config_entry.options.get('direct_request_protocol', False)
-            and hub.direct_coordinator.data is not None
-            and item.inverter_id in hub.direct_coordinator.data
-    )
+    # Created whenever the option is on, even if the first direct refresh
+    # failed: the entities report unavailable and recover on the next
+    # successful poll instead of being missing until a reload.
+    return bool(config_entry.options.get('direct_request_protocol', False))
 
 
 def create_direct_sensors(item, coordinator):

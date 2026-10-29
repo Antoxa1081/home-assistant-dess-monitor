@@ -363,6 +363,40 @@ class TestDirectSensors:
         coord.last_update_success = True
         return coord
 
+    def test_available_follows_direct_coordinator(self):
+        # Issue #90: availability must not come from the main coordinator.
+        item = _make_item()
+        item.online = False  # main coordinator view — must be ignored
+        coord = self._coord({"qpigs": {}})
+        s = DirectPVPowerSensor(item, coord)
+        assert s.available is True
+        coord.last_update_success = False
+        assert s.available is False
+
+    def test_unavailable_when_device_missing_or_no_data(self):
+        item = _make_item()
+        coord = self._coord({})
+        coord.data = {"OTHER": {}}
+        s = DirectPVPowerSensor(item, coord)
+        assert s.available is False
+        assert s.data == {}
+        coord.data = None
+        assert s.available is False
+        s.async_write_ha_state = MagicMock()
+        s._handle_coordinator_update()  # must not raise
+        assert s._attr_native_value is None
+
+    def test_enum_unknown_code_becomes_none(self):
+        item = _make_item()
+        coord = self._coord({"qpiri": {"output_source_priority": "3"}})
+        s = OutputSourcePrioritySensor(item, coord, "qpiri", "output_source_priority")
+        s.async_write_ha_state = MagicMock()
+        s._handle_coordinator_update()
+        assert s._attr_native_value is None
+        coord.data = {"PN1": {"qpiri": {"output_source_priority": "SBU"}}}
+        s._handle_coordinator_update()
+        assert s._attr_native_value == "SBU"
+
     def test_typed_sensor_reads_section_key(self):
         item = _make_item()
         coord = self._coord({"qpigs": {"output_active_power": "1234"}})

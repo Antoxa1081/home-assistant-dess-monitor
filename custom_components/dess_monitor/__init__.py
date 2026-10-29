@@ -48,9 +48,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     await mapping.async_load()
     my_coordinator = MainCoordinator(hass, entry, client, device_cache)
     direct_coordinator_ctx = DirectCoordinator(hass, entry, client, device_cache)
+    # Only the main (cloud) poll gates setup. The direct relay is optional and
+    # flaky (sendCmdToDevice timeouts); if its first refresh raised
+    # ConfigEntryNotReady the cloud sensors would not load either. A failed
+    # direct refresh just leaves its sensors unavailable until the next tick.
     await asyncio.gather(
         my_coordinator.async_config_entry_first_refresh(),
-        direct_coordinator_ctx.async_config_entry_first_refresh()
+        direct_coordinator_ctx.async_refresh(),
     )
 
     entry.runtime_data = hub.Hub(hass, username, client, my_coordinator, direct_coordinator_ctx, mapping)

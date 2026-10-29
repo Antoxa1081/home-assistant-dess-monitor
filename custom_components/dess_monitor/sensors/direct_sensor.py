@@ -52,12 +52,24 @@ class DirectSensorBase(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return True if inverter_device and hub is available."""
-        return self._inverter_device.online and self._inverter_device.hub.online
+        """Follow the direct coordinator, not the main one (issue #90).
+
+        State is only written on direct-coordinator notifications, so tying
+        availability to the main coordinator's online flags could leave the
+        entity stuck "unavailable" (or showing stale values as available)
+        until HA restarts.
+        """
+        return (
+            super().available
+            and self._inverter_device.inverter_id in (self.coordinator.data or {})
+        )
 
     @property
-    def data(self):
-        return self.coordinator.data[self._inverter_device.inverter_id]
+    def data(self) -> dict:
+        # Devices filtered out of the poll (cloud status 1) or a coordinator
+        # that has no data yet must not raise: an exception in one listener
+        # stops the coordinator from notifying every entity after it.
+        return (self.coordinator.data or {}).get(self._inverter_device.inverter_id) or {}
 
 
 class DirectTypedSensorBase(DirectSensorBase):
@@ -172,11 +184,12 @@ class DirectEnumSensorBase(DirectTypedSensorBase):
         section = self.data.get(self.data_section, {})
         raw_value = section.get(self.data_key)
 
-        if raw_value is not None:
-            try:
-                self._attr_native_value = raw_value
-            except ValueError:
-                self._attr_native_value = None
+        # The decoder passes unknown enum codes through as the raw token (kept
+        # for diagnostics). HA raises ValueError for a state outside
+        # ``options``, which would also stop the coordinator from updating
+        # every entity registered after this one (issue #90, ParallelMode "4").
+        if raw_value is not None and raw_value in self.options:
+            self._attr_native_value = raw_value
         else:
             self._attr_native_value = None
 
