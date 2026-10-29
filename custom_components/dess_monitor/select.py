@@ -100,7 +100,7 @@ class SelectBase(CoordinatorEntity, SelectEntity):
             "sw_version": self._inverter_device.firmware_version,
             "model": self._inverter_device.device_data['pn'],
             "serial_number": self._inverter_device.device_data['sn'],
-            "hw_version": self._inverter_device.device_data['devcode'],
+            "hw_version": str(self._inverter_device.device_data['devcode']),
             "model_id": self._inverter_device.device_data['devaddr'],
             "manufacturer": 'ESS'
         }
