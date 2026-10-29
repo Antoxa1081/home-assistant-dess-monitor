@@ -58,6 +58,8 @@ async def async_setup_entry(
     for item in hub.items:
         # grid sensors
         new_devices.append(InverterOutputPrioritySelect(item, coordinator))
+        if item.device_data.get('devcode') in CHARGER_PRIORITY_DEVCODES:
+            new_devices.append(InverterChargerPrioritySelect(item, coordinator))
         if virtual_battery_enabled:
             new_devices.append(VirtualBatteryChemistrySelect(item, coordinator))
         if coordinator_data is None or item.inverter_id not in coordinator_data:
@@ -294,6 +296,97 @@ class InverterDynamicSettingSelect(SelectBase, RestoreEntity):
 
             self._attr_current_option = option
             self.async_write_ha_state()
+
+
+# Charger source priority (inverter program 16) per devcode: cloud ctrl field,
+# option -> written key, and the labels the cloud reads back.
+CHARGER_PRIORITY_DEVCODES = {
+    2449: {
+        'param_id': 'bat_charging_source',
+        'keys': {
+            'Solar First': '12337',
+            'Solar + Utility': '12338',
+            'Only Solar': '12339',
+        },
+        'read_labels': {
+            'solar first': 'Solar First',
+            'solar + utility': 'Solar + Utility',
+            'only solar charging permitted': 'Only Solar',
+            'only solar': 'Only Solar',
+        },
+    },
+}
+CHARGER_PRIORITY_POLL_SECONDS = 300
+# After a write, read back this soon instead of waiting a full poll interval.
+CHARGER_PRIORITY_READBACK_SECONDS = 30
+
+
+class InverterChargerPrioritySelect(SelectBase, RestoreEntity):
+    """Dedicated charger source priority select (inverter program 16).
+
+    The generic ``dynamic_settings`` option exposes every cloud ctrl field
+    (including "Restore To Default") and polls each of them; this exposes only
+    the charger source priority, for the devcodes in CHARGER_PRIORITY_DEVCODES.
+    """
+
+    _attr_current_option = None
+    should_poll = True
+
+    def __init__(self, inverter_device: InverterDevice, coordinator: MainCoordinator):
+        super().__init__(inverter_device, coordinator)
+        self._spec = CHARGER_PRIORITY_DEVCODES[inverter_device.device_data['devcode']]
+        self._attr_unique_id = f"{self._inverter_device.inverter_id}_charger_priority"
+        self._attr_name = f"{self._inverter_device.name} Charger Priority"
+        self._attr_icon = 'mdi:battery-charging-outline'
+        self._attr_options = list(self._spec['keys'])
+        self._next_read_at = 0
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None and last.state in self._attr_options:
+            self._attr_current_option = last.state
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        # The value comes from async_update, not from the coordinator payload.
+        self.async_write_ha_state()
+
+    async def async_update(self) -> None:
+        now = int(datetime.now().timestamp())
+        if now < self._next_read_at:
+            return
+        self._next_read_at = now + CHARGER_PRIORITY_POLL_SECONDS
+        try:
+            async with async_timeout.timeout(DYNAMIC_SETTINGS_API_TIMEOUT):
+                response = await self.coordinator.client.control.get_value(
+                    DeviceIdentity.from_dict(self._inverter_device.device_data),
+                    self._spec['param_id'],
+                )
+        except (TimeoutError, Exception) as err:
+            _LOGGER.debug("Skipping update of %s: %s", self._attr_unique_id, err)
+            return
+        if not isinstance(response, dict) or 'err' in response:
+            return
+        raw_val = response.get('val')
+        if not isinstance(raw_val, str):
+            return
+        option = self._spec['read_labels'].get(raw_val.strip().lower())
+        if option is not None:
+            self._attr_current_option = option
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in self._spec['keys']:
+            return
+        await self.coordinator.client.control.set_param(
+            DeviceIdentity.from_dict(self._inverter_device.device_data),
+            self._spec['param_id'],
+            self._spec['keys'][option],
+        )
+        self._attr_current_option = option
+        # Optimistic until the read-back confirms what the inverter accepted.
+        self._next_read_at = int(datetime.now().timestamp()) + CHARGER_PRIORITY_READBACK_SECONDS
+        self.async_write_ha_state()
 
 
 class VirtualBatteryChemistrySelect(SelectBase, RestoreEntity):
