@@ -496,6 +496,18 @@ class TestDevcode6515:
     def test_resolves(self, canonical, expected):
         assert disc().resolve(PN, canonical, _devcode_6515_payload()) == pytest.approx(expected)
 
+    @pytest.mark.parametrize(("current", "charging", "discharging"), [
+        ("1.4", 1.4, 0.0),
+        ("-0.7", 0.0, 0.7),   # evening snapshot attached to #95
+    ])
+    def test_battery_current_is_signed(self, current, charging, discharging):
+        payload = _devcode_6515_payload()
+        payload["pars"]["parameter"].append(
+            {"par": "eybond_read_25", "name": "Battery Current", "val": current, "unit": "A"})
+        d = disc()
+        assert d.resolve(PN, "battery_charging_current", payload) == pytest.approx(charging)
+        assert d.resolve(PN, "battery_discharge_current", payload) == pytest.approx(discharging)
+
 
 class TestSeedFingerprint:
     def test_version_embeds_seed_hash(self):

@@ -145,7 +145,8 @@ CANONICAL_METRICS: dict[str, list[ProviderKeyCandidate]] = {
         ProviderKeyCandidate("bt_battery_charging_current", MATCH_FIELD_ID),
         ProviderKeyCandidate("bt_battery_charging_current", MATCH_FIELD_PAR),
         ProviderKeyCandidate("Battery charging current", MATCH_FIELD_ID),
-        ProviderKeyCandidate("eybond_read_25", MATCH_FIELD_ID),
+        # Signed on eybond firmwares (devcode 6515, #95): + charging, - discharging.
+        ProviderKeyCandidate("eybond_read_25", MATCH_FIELD_ID, sign=SIGN_POSITIVE),
         ProviderKeyCandidate("Battery Current", MATCH_FIELD_ID, sign=SIGN_POSITIVE),
         # Stevo Hybrid Monster (devcode 6467) — bt_input_current is the charging leg.
         ProviderKeyCandidate("bt_input_current", MATCH_FIELD_ID),
@@ -167,6 +168,8 @@ CANONICAL_METRICS: dict[str, list[ProviderKeyCandidate]] = {
         # discharge magnitude (positive when discharging) on this firmware.
         ProviderKeyCandidate("bt_battery_current", MATCH_FIELD_ID),
         ProviderKeyCandidate("bt_battery_current", MATCH_FIELD_PAR),
+        # Signed eybond battery current (devcode 6515, #95): negative = discharge.
+        ProviderKeyCandidate("eybond_read_25", MATCH_FIELD_ID, sign=SIGN_NEGATIVE, unit_hint="A"),
     ],
     "battery_active_power": [
         ProviderKeyCandidate("battery_active_power", MATCH_FIELD_ID),
