@@ -73,12 +73,28 @@ class Session:
         await self._storage.save(auth)
         return auth
 
-    async def get_auth(self, *, force_refresh: bool = False) -> Auth:
-        """Return a valid :class:`Auth`, refreshing if expired or ``force_refresh``."""
+    async def get_auth(
+        self, *, force_refresh: bool = False, rejected_token: str | None = None,
+    ) -> Auth:
+        """Return a valid :class:`Auth`, refreshing if expired or ``force_refresh``.
+
+        ``rejected_token`` is the token the caller just saw rejected: when a
+        concurrent caller already replaced it, the fresh one is returned
+        instead of logging in again. Without this, N parallel requests failing
+        with the same expired token triggered N back-to-back logins and hit the
+        cloud's rate limit (err=3/9).
+        """
         async with self._lock:
             if not self._loaded:
                 self._loaded = True
                 self._auth = await self._storage.load()
+            if (
+                rejected_token is not None
+                and self._auth is not None
+                and self._auth.token != rejected_token
+                and self._is_valid(self._auth)
+            ):
+                return self._auth
             if not force_refresh and self._is_valid(self._auth):
                 assert self._auth is not None
                 return self._auth
@@ -111,7 +127,7 @@ class Session:
             )
         except errors.AuthError:
             _LOGGER.info("Auth token rejected (action=%s) — re-authenticating", action)
-            auth = await self.get_auth(force_refresh=True)
+            auth = await self.get_auth(force_refresh=True, rejected_token=auth.token)
             return await self._http.authenticated_request(
                 action,
                 params,

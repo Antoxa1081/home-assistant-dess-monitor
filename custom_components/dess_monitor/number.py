@@ -386,10 +386,14 @@ class InverterDynamicSettingNumber(NumberBase, RestoreNumber):
                     DeviceIdentity.from_dict(self._inverter_device.device_data),
                     self._service_param_id,
                 )
-        except (TimeoutError, Exception) as err:
+        except Exception as err:  # noqa: BLE001 — includes TimeoutError
             _LOGGER.debug(
                 "Skipping update of %s: %s", self._attr_unique_id, err,
             )
+            # Back off a full interval: retrying every 60 s scan tick across
+            # dozens of CONFIG entities piles onto a cloud that is already
+            # failing or rate-limiting.
+            self._last_updated = now
             return
 
         if not isinstance(response, dict) or 'err' in response:

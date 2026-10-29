@@ -189,6 +189,22 @@ class TestOutputPrioritySelect:
             await s.async_select_option("Bogus")
             mock_set.assert_not_awaited()
 
+    async def test_select_option_unsupported_devcode_raises(self):
+        # #92: used to silently pretend success on unknown devcodes.
+        from homeassistant.exceptions import HomeAssistantError
+        item = _make_item(devcode=6514)
+        coord = _make_coordinator(data={"PN1": {"x": 1}})
+        with patch(
+            "custom_components.dess_monitor.select.set_inverter_output_priority",
+            new=AsyncMock(),
+        ) as mock_set:
+            s = InverterOutputPrioritySelect(item, coord)
+            s._attr_current_option = "SBU"
+            with pytest.raises(HomeAssistantError):
+                await s.async_select_option("Solar")
+            mock_set.assert_not_awaited()
+        assert s._attr_current_option == "SBU"
+
 
 # --- InverterDynamicSettingSelect -------------------------------------------
 

@@ -27,9 +27,12 @@ async def async_get_device_diagnostics(
     return {
         "device": {
             'devcode': device.hw_version,
-            'data': async_redact_data(entry.runtime_data.coordinator.data[device.model], [
-                'devalias', 'pn', 'sn', 'collalias', 'usr'
-            ]),
+            # .get: an offline device (or a failed first poll) has no entry,
+            # and diagnostics are exactly what people download then.
+            'data': async_redact_data(
+                (entry.runtime_data.coordinator.data or {}).get(device.model) or {}, [
+                    'devalias', 'pn', 'sn', 'collalias', 'usr'
+                ]),
             'direct_data': (entry.runtime_data.direct_coordinator.data or {}) \
                 .get(device.model, {})
         }

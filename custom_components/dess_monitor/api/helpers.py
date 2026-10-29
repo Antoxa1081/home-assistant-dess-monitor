@@ -154,6 +154,11 @@ def get_sensor_value_simple_entry(
     return None
 
 
+# Devcodes whose output priority register is known to
+# set_inverter_output_priority / get_inverter_output_priority below.
+OUTPUT_PRIORITY_DEVCODES = frozenset({2341, 2376, 2428, 2449})
+
+
 async def set_inverter_output_priority(
     client: DessmonitorClient,
     device_data: dict[str, Any],

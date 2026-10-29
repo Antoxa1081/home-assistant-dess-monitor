@@ -6,13 +6,17 @@ import async_timeout
 from homeassistant.components.select import SelectEntity
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN, EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.dess_monitor import HubConfigEntry, MainCoordinator
-from custom_components.dess_monitor.api.helpers import set_inverter_output_priority
+from custom_components.dess_monitor.api.helpers import (
+    OUTPUT_PRIORITY_DEVCODES,
+    set_inverter_output_priority,
+)
 from custom_components.dess_monitor.api.resolvers.data_resolvers import resolve_output_priority
 from custom_components.dess_monitor.const import (
     BATTERY_CHEMISTRIES,
@@ -180,6 +184,12 @@ class InverterOutputPrioritySelect(SelectBase, RestoreEntity):
 
     async def async_select_option(self, option: str):
         if option in self._attr_options:
+            devcode = self._inverter_device.device_data.get('devcode')
+            if devcode not in OUTPUT_PRIORITY_DEVCODES:
+                # Used to look like it worked while nothing was sent (#92).
+                raise HomeAssistantError(
+                    f"Setting output priority is not supported for devcode {devcode} yet"
+                )
             # los_output_source_priority Utility, Solar, SBU
             await set_inverter_output_priority(
                 self.coordinator.client,
@@ -246,10 +256,14 @@ class InverterDynamicSettingSelect(SelectBase, RestoreEntity):
                     DeviceIdentity.from_dict(self._inverter_device.device_data),
                     self._service_param_id,
                 )
-        except (TimeoutError, Exception) as err:
+        except Exception as err:  # noqa: BLE001 — includes TimeoutError
             _LOGGER.debug(
                 "Skipping update of %s: %s", self._attr_unique_id, err,
             )
+            # Back off a full interval: retrying every 60 s scan tick across
+            # dozens of CONFIG entities piles onto a cloud that is already
+            # failing or rate-limiting.
+            self._last_updated = now
             return
 
         if not isinstance(response, dict) or 'err' in response:

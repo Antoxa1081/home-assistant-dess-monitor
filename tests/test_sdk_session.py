@@ -219,3 +219,22 @@ class TestProperties:
         sess = Session(http, creds)
         assert sess.http is http
         assert sess.credentials is creds
+
+
+class TestConcurrentReauth:
+    async def test_rejected_token_already_replaced_skips_login(self) -> None:
+        http = _make_http(_login_dat(token="new"))
+        sess = Session(http, _creds(), storage=InMemoryTokenStorage())
+        await sess.get_auth()  # logs in -> "new"
+        assert http.public_request.await_count == 1
+        # A caller that saw an older token rejected must not log in again.
+        auth = await sess.get_auth(force_refresh=True, rejected_token="old")
+        assert auth.token == "new"
+        assert http.public_request.await_count == 1
+
+    async def test_rejected_current_token_logs_in(self) -> None:
+        http = _make_http(_login_dat(token="tok"))
+        sess = Session(http, _creds(), storage=InMemoryTokenStorage())
+        await sess.get_auth()
+        await sess.get_auth(force_refresh=True, rejected_token="tok")
+        assert http.public_request.await_count == 2

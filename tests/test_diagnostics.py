@@ -106,3 +106,15 @@ class TestDeviceDiagnostics:
 
         result = await async_get_device_diagnostics(hass, entry, device)
         assert result["device"]["direct_data"] == {}
+
+    async def test_missing_device_or_no_main_data_does_not_raise(self, hass) -> None:
+        device = SimpleNamespace(hw_version="2376", model="PN1")
+        for main_data in ({"OTHER": {}}, None):
+            entry = SimpleNamespace(
+                runtime_data=SimpleNamespace(
+                    coordinator=SimpleNamespace(data=main_data),
+                    direct_coordinator=SimpleNamespace(data=None),
+                )
+            )
+            result = await async_get_device_diagnostics(hass, entry, device)
+            assert result["device"]["data"] == {}
