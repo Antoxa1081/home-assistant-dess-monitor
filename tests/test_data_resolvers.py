@@ -97,6 +97,16 @@ class TestPassThroughResolvers:
         device = FakeDevice({canonical: 42.5})
         assert func({}, device) == 42.5
 
+    def test_output_priority_prefers_ctrl_readback(self):
+        device = FakeDevice({"output_priority": "Utility"})
+        data = {"device_extra": {"output_priority": "SBU"}}
+        assert dr.resolve_output_priority(data, device) == "SBU"
+
+    def test_output_priority_ignores_non_string_readback(self):
+        device = FakeDevice({"output_priority": "Utility"})
+        data = {"device_extra": {"output_priority": {}}}
+        assert dr.resolve_output_priority(data, device) == "Utility"
+
     @pytest.mark.parametrize(
         "func,canonical",
         [

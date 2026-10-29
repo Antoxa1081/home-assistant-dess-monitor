@@ -58,6 +58,10 @@ _OUTPUT_PRIORITY_MAP: Mapping[str, str] = {
     "sub": "SUB", "sub first": "SUB",
     "suf": "SUF",
     "off": "OFF",
+    # PowMr devcode 2449 publishes the priority as a source-order label.
+    "utility solar bat": "Utility",
+    "solar utility bat": "Solar",  # label from the device's ctrl-field list (12337)
+    "solar bat utility": "SBU",
 }
 
 _CHARGE_PRIORITY_MAP: Mapping[str, str] = {
