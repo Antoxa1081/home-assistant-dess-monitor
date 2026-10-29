@@ -363,7 +363,7 @@ class InverterChargerPrioritySelect(SelectBase, RestoreEntity):
                     DeviceIdentity.from_dict(self._inverter_device.device_data),
                     self._spec['param_id'],
                 )
-        except (TimeoutError, Exception) as err:
+        except Exception as err:  # noqa: BLE001 — includes TimeoutError
             _LOGGER.debug("Skipping update of %s: %s", self._attr_unique_id, err)
             return
         if not isinstance(response, dict) or 'err' in response:

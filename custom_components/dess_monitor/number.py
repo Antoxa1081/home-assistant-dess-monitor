@@ -149,6 +149,18 @@ def _parse_hint(
     return lo, hi, has_decimal
 
 
+def _format_param_value(value: float, step: float | None) -> str:
+    """Render a number the way the cloud expects it for ``set_param``.
+
+    Integer-step fields (SOC %, minutes, currents) must go out as ``"40"``:
+    the cloud rejects or times out on ``"40.0"`` (issue #87). Decimal fields
+    keep one decimal place, without float noise like ``54.300000000000004``.
+    """
+    if step is not None and step >= 1:
+        return str(int(round(value)))
+    return f"{round(value, 1):.1f}"
+
+
 # Standard battery-bank nominal voltages used to infer which voltage system
 # the cloud's hint was sized for when the inverter's rated voltage doesn't
 # match the hint's range.
@@ -394,14 +406,14 @@ class InverterDynamicSettingNumber(NumberBase, RestoreNumber):
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
         param_id = self._service_param_id
-        param_value = str(value)
+        param_value = _format_param_value(value, self._attr_native_step)
         await self.coordinator.client.control.set_param(
             DeviceIdentity.from_dict(self._inverter_device.device_data),
             param_id,
             param_value,
         )
 
-        self._attr_native_value = param_value
+        self._attr_native_value = float(param_value)
         self.async_write_ha_state()
 
 

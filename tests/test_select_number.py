@@ -365,7 +365,28 @@ class TestDynamicSettingNumber:
         args = coord.client.control.set_param.await_args.args
         assert args[1] == "bat_cutoff_voltage"
         assert args[2] == "45.0"
-        assert s._attr_native_value == "45.0"
+        assert s._attr_native_value == 45.0
+
+    async def test_set_integer_field_sends_int(self):
+        # Issue #87: SOC fields rejected "40.0" — integer-step fields send "40".
+        item = _make_item()
+        coord = _make_coordinator(options={})
+        s = InverterDynamicSettingNumber(
+            item, coord, self._field(unit="%"),
+        )
+        s.async_write_ha_state = MagicMock()
+        await s.async_set_native_value(40.0)
+        args = coord.client.control.set_param.await_args.args
+        assert args[2] == "40"
+        assert s._attr_native_value == 40.0
+
+    async def test_set_decimal_field_drops_float_noise(self):
+        item = _make_item()
+        coord = _make_coordinator(options={})
+        s = InverterDynamicSettingNumber(item, coord, self._field(hint="40.0~60.0V"))
+        s.async_write_ha_state = MagicMock()
+        await s.async_set_native_value(54.300000000000004)
+        assert coord.client.control.set_param.await_args.args[2] == "54.3"
 
     async def test_update_sets_value_from_response(self):
         item = _make_item()
