@@ -15,7 +15,7 @@
           "username": "Login",
           "dynamic_settings": "Device settings (allow to read & set equipment settings)",
           "raw_sensors": "Device raw sensors (provide all available by wifi plug sensor fields)",
-          "direct_request_protocol": "Direct data request protocol beta (provide near-realtime direct data reading from equipment, excluding non Axpert devices like Anenji etc.)"
+          "direct_request_protocol": "Direct data request (beta): near-realtime readings from the inverter via the DESS cloud relay. Set the direct protocol to match your inverter: Axpert/PI30, SMG-II Modbus (Anenji, EASUN SMG, devcode 2376) or PI18"
         }
       },
       "select_devices": {
@@ -33,7 +33,7 @@
           "devices": "Available devices",
           "dynamic_settings": "Device settings (allow to read & set equipment settings)",
           "raw_sensors": "Device raw sensors (provide all available by wifi plug sensor fields)",
-          "direct_request_protocol": "Direct data request protocol beta (provide near-realtime direct data reading from equipment, excluding non Axpert devices like Anenji etc.)"
+          "direct_request_protocol": "Direct data request (beta): near-realtime readings from the inverter via the DESS cloud relay. Set the direct protocol to match your inverter: Axpert/PI30, SMG-II Modbus (Anenji, EASUN SMG, devcode 2376) or PI18"
         }
       }
     }

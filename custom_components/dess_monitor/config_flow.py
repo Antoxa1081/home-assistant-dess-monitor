@@ -195,7 +195,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_select_devices(self, user_input=None):
         if user_input is not None:
             devices = user_input["devices"]  # List of selected device IDs
-            # print("devices_selected", devices)
             if len(devices) > 0:
                 return self.async_create_entry(title=self._info["title"], data={
                     'username': self._username,
@@ -238,7 +237,6 @@ class OptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
-            # print('user_input', user_input)
             return self.async_create_entry(data=user_input)
 
         # Get login data from the config entry

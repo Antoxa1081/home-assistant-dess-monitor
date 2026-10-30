@@ -8,8 +8,6 @@ import pytest
 from custom_components.dess_monitor.api import helpers
 from custom_components.dess_monitor.api.helpers import (
     get_inverter_output_priority,
-    get_sensor_value_simple,
-    get_sensor_value_simple_entry,
     resolve_param,
     safe_float,
     safe_int,
@@ -128,64 +126,6 @@ class TestSafeInt:
     def test_custom_default(self):
         assert safe_int("", default=0) == 0
         assert safe_int("n/a", default=-1) == -1
-
-
-# ---------------------------------------------------------------------------
-# get_sensor_value_simple / _entry
-# ---------------------------------------------------------------------------
-
-class TestGetSensorValueSimple:
-    def test_id_match(self):
-        # battery_voltage maps to keys including "bt_battery_voltage".
-        data = {"params": [{"id": "bt_battery_voltage", "val": "27.0"}]}
-        assert get_sensor_value_simple("battery_voltage", data, {}) == "27.0"
-
-    def test_par_match_with_nonzero_status(self):
-        data = {"params": [{"par": "bt_battery_voltage", "val": "27.0", "status": 1}]}
-        assert get_sensor_value_simple("battery_voltage", data, {}) == "27.0"
-
-    def test_par_match_status_zero_skipped(self):
-        # status == 0 -> the par branch does not return, falls through to None.
-        data = {"params": [{"par": "bt_battery_voltage", "val": "27.0", "status": 0}]}
-        assert get_sensor_value_simple("battery_voltage", data, {}) is None
-
-    def test_unknown_sensor_name_returns_none(self):
-        assert get_sensor_value_simple("does_not_exist", {"x": 1}, {}) is None
-
-    def test_no_match_returns_none(self):
-        data = {"params": [{"id": "unrelated", "val": "1"}]}
-        assert get_sensor_value_simple("battery_voltage", data, {}) is None
-
-    def test_case_insensitive_key_match(self):
-        data = {"params": [{"id": "BT_BATTERY_VOLTAGE", "val": "27.0"}]}
-        assert get_sensor_value_simple("battery_voltage", data, {}) == "27.0"
-
-
-class TestGetSensorValueSimpleEntry:
-    def test_id_entry(self):
-        data = {"params": [{"id": "bt_battery_voltage", "val": "27.0", "unit": "V"}]}
-        assert get_sensor_value_simple_entry("battery_voltage", data, {}) == (
-            "bt_battery_voltage", "27.0", "V",
-        )
-
-    def test_id_entry_without_unit(self):
-        data = {"params": [{"id": "bt_battery_voltage", "val": "27.0"}]}
-        assert get_sensor_value_simple_entry("battery_voltage", data, {}) == (
-            "bt_battery_voltage", "27.0", None,
-        )
-
-    def test_par_entry_nonzero_status(self):
-        data = {"params": [{"par": "bt_battery_voltage", "val": "27.0", "status": 5, "unit": "V"}]}
-        assert get_sensor_value_simple_entry("battery_voltage", data, {}) == (
-            "bt_battery_voltage", "27.0", "V",
-        )
-
-    def test_par_entry_status_zero_returns_none(self):
-        data = {"params": [{"par": "bt_battery_voltage", "val": "27.0", "status": 0}]}
-        assert get_sensor_value_simple_entry("battery_voltage", data, {}) is None
-
-    def test_no_match_returns_none(self):
-        assert get_sensor_value_simple_entry("battery_voltage", {}, {}) is None
 
 
 # ---------------------------------------------------------------------------

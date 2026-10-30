@@ -18,7 +18,7 @@ It talks to the cloud over REST + WebSocket and exposes:
 ## 📚 Documentation
 
 - **[Wiki](https://github.com/Antoxa1081/home-assistant-dess-monitor/wiki)** — supported devices, FAQ, troubleshooting, recipes.
-- **[Configuration guide](https://github.com/Antoxa1081/home-assistant-dess-monitor/wiki)** — every option in the config / options flow, recommended profiles, virtual-battery tuning, migration notes.
+- **[Configuration guide](docs/Configuration.md)** — every option in the config / options flow, recommended profiles, virtual-battery tuning, migration notes.
 
 ---
 

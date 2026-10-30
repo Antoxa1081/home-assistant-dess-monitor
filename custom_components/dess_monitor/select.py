@@ -71,7 +71,6 @@ async def async_setup_entry(
         fields = coordinator_data[item.inverter_id]['ctrl_fields']
         if fields is None:
             continue
-        # print(config_entry.data)
         if config_entry.options.get('dynamic_settings', False) is True:
             async_add_entities(list(
                 map(

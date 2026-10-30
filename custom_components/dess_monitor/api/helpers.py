@@ -1,6 +1,5 @@
 from typing import Any
 
-from custom_components.dess_monitor.api.resolvers.data_keys_map import SENSOR_KEYS_MAP
 from custom_components.dess_monitor.sdk import DessmonitorClient, DeviceIdentity
 
 
@@ -112,46 +111,6 @@ def safe_int(val: Any, default: int | None = None) -> int | None:
         return int(f)
     except (ValueError, TypeError, OverflowError):
         return default
-
-
-def get_sensor_value_simple(
-        name: str,
-        data: dict[str, Any],
-        device_data: dict[str, Any]
-) -> str | None:
-    keys = SENSOR_KEYS_MAP.get(name, [])
-
-    for key in keys:
-        res = resolve_param(data, {"id": key}, case_insensitive=True)
-        if res:
-            return res.get("val")
-        res = resolve_param(data, {"par": key}, case_insensitive=True)
-        if res:
-            if res.get("status") != 0:
-                return res.get("val")
-    return None
-
-
-def get_sensor_value_simple_entry(
-        name: str,
-        data: dict[str, Any],
-        device_data: dict[str, Any]
-) -> tuple[str, Any, Any] | None:
-    """
-    Ищет значение сенсора по ключам из SENSOR_KEYS_MAP[name].
-    Возвращает кортеж (имя_поля, значение), где имя_поля — "id" или "par".
-    """
-    keys = SENSOR_KEYS_MAP.get(name, [])
-    for key in keys:
-        res = resolve_param(data, {"id": key}, case_insensitive=True)
-        if res:
-            return res.get("id"), res.get("val"), res.get("unit", None)
-        res = resolve_param(data, {"par": key}, case_insensitive=True)
-        if res:
-            if res.get("status") == 0:
-                return None
-            return res.get("par"), res.get("val"), res.get("unit", None)
-    return None
 
 
 # Devcodes whose output priority register is known to

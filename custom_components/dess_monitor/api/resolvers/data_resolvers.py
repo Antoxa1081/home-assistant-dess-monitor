@@ -1,9 +1,8 @@
 """Canonical metric resolvers — thin wrappers over the self-discovery layer.
 
 Each ``resolve_*`` function takes the per-device tick data plus the owning
-``InverterDevice`` and returns the normalised value. The legacy
-``data_keys_map.py`` / :func:`get_sensor_value_simple` path is no longer used —
-all lookups now go through :class:`MappingDiscovery`, which auto-detects the
+``InverterDevice`` and returns the normalised value. All lookups go through
+:class:`MappingDiscovery`, which auto-detects the
 matching provider key the first time a device responds, pins it, and persists
 the choice across HA restarts.
 
