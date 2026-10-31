@@ -7,6 +7,8 @@ on:
   # Manual "Run workflow" button in the Actions tab — test CI on a feature
   # branch without pushing to main or opening a PR.
   workflow_dispatch:
+  # Called by release.yml so a release is only cut from a green main.
+  workflow_call:
 
 jobs:
   lint:
