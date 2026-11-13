@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
+from homeassistant.util import dt as dt_util
 
 from custom_components.dess_monitor.api.helpers import get_inverter_output_priority
 from custom_components.dess_monitor.const import (
@@ -35,6 +36,18 @@ from custom_components.dess_monitor.sdk import (
 _LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+# Powland iSolar SMG III (devcode 6515) advertises these metrics through
+# queryDeviceFields/queryDeviceDataOneDayPaging, but omits them from both live
+# snapshot endpoints consumed by the integration.  Keep the fallback scoped to
+# the affected firmware family and refresh it less frequently than live power.
+_HISTORY_FALLBACK_DEVCODES = {"6515"}
+_HISTORY_FALLBACK_REFRESH_SECONDS = 300
+_HISTORY_FALLBACK_METRICS = {
+    "Grid Voltage",
+    "INV Module Termperature",
+    "DC Module Termperature",
+}
 
 
 async def safe_call(coro: Coroutine[Any, Any, T] | Awaitable[T], default: T | None = None) -> T | None:
@@ -73,6 +86,48 @@ def _clamp(value: object, low: int, high: int) -> int:
         return low
 
 
+def _history_fallback_params(history: dict[str, Any]) -> dict[str, Any]:
+    """Convert selected values from the latest history row to resolver params.
+
+    The result deliberately lives outside ``last_data`` so the mapping resolver
+    can consume it without the dynamic-sensor factory creating duplicate
+    entities for the same canonical metrics.
+    """
+    titles = history.get("title")
+    rows = history.get("row")
+    if not isinstance(titles, list) or not isinstance(rows, list) or not rows:
+        return {}
+
+    row = next(
+        (
+            candidate
+            for candidate in rows
+            if isinstance(candidate, dict) and candidate.get("realtime") is True
+        ),
+        rows[0],
+    )
+    values = row.get("field") if isinstance(row, dict) else None
+    if not isinstance(values, list):
+        return {}
+
+    params: list[dict[str, Any]] = []
+    for index, title in enumerate(titles):
+        if not isinstance(title, dict) or index >= len(values):
+            continue
+        name = title.get("title")
+        if name not in _HISTORY_FALLBACK_METRICS:
+            continue
+        value = values[index]
+        if value in (None, ""):
+            continue
+        param = {"id": name, "par": name, "val": value}
+        if unit := title.get("unit"):
+            param["unit"] = unit
+        params.append(param)
+
+    return {"parameter": params} if params else {}
+
+
 class MainCoordinator(DataUpdateCoordinator):
     devices: list[dict[str, Any]] = []
 
@@ -103,6 +158,8 @@ class MainCoordinator(DataUpdateCoordinator):
         self._stale_live_seconds = STALE_LIVE_DATA_MAX_SECONDS
         self._pars_cache: dict[str, dict[str, Any]] = {}
         self._pars_fetched_at: dict[str, float] = {}
+        self._history_fallback_cache: dict[str, dict[str, Any]] = {}
+        self._history_fallback_fetched_at: dict[str, float] = {}
         self._last_device_data: dict[str, dict[str, Any]] = {}
         self._last_live_fetch_at: dict[str, dict[str, float]] = {}
 
@@ -156,6 +213,33 @@ class MainCoordinator(DataUpdateCoordinator):
             return cached
         return {}
 
+    async def _get_history_fallback_cached(
+        self, pn: str, identity: DeviceIdentity
+    ) -> dict[str, Any]:
+        """Fetch telemetry omitted by devcode 6515's snapshot endpoints."""
+        now = monotonic()
+        cached = self._history_fallback_cache.get(pn)
+        last = self._history_fallback_fetched_at.get(pn, 0.0)
+        if cached is not None and (now - last) < _HISTORY_FALLBACK_REFRESH_SECONDS:
+            return cached
+
+        history = await safe_call(
+            self._client.devices.historical_data(
+                identity,
+                dt_util.now().date().isoformat(),
+                page=0,
+                pagesize=1,
+            ),
+            default=None,
+        )
+        self._history_fallback_fetched_at[pn] = now
+        if history is not None:
+            fresh = _history_fallback_params(history)
+            if fresh:
+                self._history_fallback_cache[pn] = fresh
+                return fresh
+        return cached or {}
+
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
         try:
             async with async_timeout.timeout(self._update_timeout):
@@ -169,6 +253,9 @@ class MainCoordinator(DataUpdateCoordinator):
                     last_data = await safe_call(self._client.devices.last_data(identity), default={})
                     energy_flow = await safe_call(self._client.devices.energy_flow(identity), default={})
                     pars = await self._get_pars_cached(pn, identity)
+                    history_fallback = {}
+                    if str(device.get('devcode')) in _HISTORY_FALLBACK_DEVCODES:
+                        history_fallback = await self._get_history_fallback_cached(pn, identity)
                     ctrl_fields = await safe_call(
                         self._device_cache.async_get_ctrl_fields(
                             pn, lambda: self._client.control.get_fields(identity)
@@ -212,6 +299,8 @@ class MainCoordinator(DataUpdateCoordinator):
                             'output_priority': output_priority,
                         }
                     }
+                    if history_fallback:
+                        result['history_fallback'] = history_fallback
                     self._last_device_data[pn] = result
                     return pn, result
 

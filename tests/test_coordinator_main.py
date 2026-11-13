@@ -7,7 +7,7 @@ added to ``hass`` so ``config_entry.options`` works.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 
@@ -21,6 +21,7 @@ from custom_components.dess_monitor.coordinators.coordinator import (
     MainCoordinator,
     _action_of,
     _clamp,
+    _history_fallback_params,
     safe_call,
 )
 from custom_components.dess_monitor.device_cache import DeviceCache
@@ -51,9 +52,29 @@ def _make_client(devices=None):
     client.devices.last_data = AsyncMock(return_value={"ld": 1})
     client.devices.energy_flow = AsyncMock(return_value={"ef": 1})
     client.devices.pars = AsyncMock(return_value={"pars": 1})
+    client.devices.historical_data = AsyncMock(return_value=_history_response())
     client.control.get_fields = AsyncMock(return_value={"field": [{"id": "x"}]})
     client.control.get_value = AsyncMock(return_value={"val": "SBU"})
     return client
+
+
+def _history_response(*, realtime=True):
+    """Minimal devcode 6515 history payload from a Powland iSolar SMG III."""
+    return {
+        "title": [
+            {"title": "Timestamp"},
+            {"title": "INV Module Termperature", "unit": "°C"},
+            {"title": "DC Module Termperature", "unit": "°C"},
+            {"title": "Grid Voltage", "unit": "V"},
+            {"title": "PV1 Power", "unit": "W"},
+        ],
+        "row": [
+            {
+                "realtime": realtime,
+                "field": ["2026-11-13 13:31:06", "44", "32", "0.0", "944"],
+            }
+        ],
+    }
 
 
 def _make_entry(hass, *, data=None, options=None):
@@ -165,6 +186,58 @@ class TestClamp:
 
     def test_none_returns_low(self):
         assert _clamp(None, 30, 900) == 30
+
+
+# --------------------------------------------------------------------------- #
+# Powland iSolar SMG III history fallback parsing
+# --------------------------------------------------------------------------- #
+
+class TestHistoryFallbackParams:
+    def test_extracts_only_missing_canonical_metrics(self):
+        assert _history_fallback_params(_history_response()) == {
+            "parameter": [
+                {
+                    "id": "INV Module Termperature",
+                    "par": "INV Module Termperature",
+                    "val": "44",
+                    "unit": "°C",
+                },
+                {
+                    "id": "DC Module Termperature",
+                    "par": "DC Module Termperature",
+                    "val": "32",
+                    "unit": "°C",
+                },
+                {
+                    "id": "Grid Voltage",
+                    "par": "Grid Voltage",
+                    "val": "0.0",
+                    "unit": "V",
+                },
+            ]
+        }
+
+    def test_prefers_realtime_row(self):
+        history = _history_response(realtime=False)
+        history["row"].insert(
+            0,
+            {
+                "realtime": False,
+                "field": ["old", "40", "30", "229", "800"],
+            },
+        )
+        history["row"].append(
+            {
+                "realtime": True,
+                "field": ["now", "45", "33", "230", "900"],
+            },
+        )
+        params = _history_fallback_params(history)["parameter"]
+        assert [param["val"] for param in params] == ["45", "33", "230"]
+
+    @pytest.mark.parametrize("history", [{}, {"title": [], "row": []}, {"title": [], "row": [{}]}])
+    def test_malformed_or_empty_payload_returns_empty(self, history):
+        assert _history_fallback_params(history) == {}
 
 
 # --------------------------------------------------------------------------- #
@@ -285,6 +358,33 @@ class TestGetParsCached:
 
 
 # --------------------------------------------------------------------------- #
+# _get_history_fallback_cached
+# --------------------------------------------------------------------------- #
+
+class TestGetHistoryFallbackCached:
+    async def test_first_call_fetches_and_second_uses_cache(self, hass):
+        coord, _, client, _ = _make_coordinator(hass)
+        identity = coord_mod.DeviceIdentity.from_dict(_device(devcode=6515))
+
+        first = await coord._get_history_fallback_cached("PN1", identity)
+        second = await coord._get_history_fallback_cached("PN1", identity)
+
+        assert first == second
+        assert first["parameter"][0]["val"] == "44"
+        client.devices.historical_data.assert_awaited_once_with(
+            identity, ANY, page=0, pagesize=1
+        )
+
+    async def test_stale_value_survives_transient_failure(self, hass):
+        coord, _, client, _ = _make_coordinator(hass)
+        identity = coord_mod.DeviceIdentity.from_dict(_device(devcode=6515))
+        first = await coord._get_history_fallback_cached("PN1", identity)
+        coord._history_fallback_fetched_at["PN1"] = 0
+        client.devices.historical_data = AsyncMock(side_effect=TransportError("down"))
+
+        assert await coord._get_history_fallback_cached("PN1", identity) == first
+
+# --------------------------------------------------------------------------- #
 # _async_update_data
 # --------------------------------------------------------------------------- #
 
@@ -305,6 +405,19 @@ class TestAsyncUpdateData:
         assert entry["ctrl_fields"] == [{"id": "x"}]
         # devcode 2376 -> output priority resolver returns None without a call.
         assert entry["device_extra"] == {"output_priority": None}
+        client.devices.historical_data.assert_not_awaited()
+
+    async def test_devcode_6515_adds_history_fallback(self, hass):
+        coord, _, client, _ = _make_coordinator(hass, devices=[_device(devcode=6515)])
+        data = await coord._async_update_data()
+
+        fallback = data["PN1"]["history_fallback"]["parameter"]
+        assert [param["id"] for param in fallback] == [
+            "INV Module Termperature",
+            "DC Module Termperature",
+            "Grid Voltage",
+        ]
+        client.devices.historical_data.assert_awaited_once()
 
     async def test_stale_live_data_reused(self, hass):
         coord, _, client, _ = _make_coordinator(hass)
