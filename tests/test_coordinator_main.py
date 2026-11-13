@@ -7,7 +7,7 @@ added to ``hass`` so ``config_entry.options`` works.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 
@@ -21,6 +21,7 @@ from custom_components.dess_monitor.coordinators.coordinator import (
     MainCoordinator,
     _action_of,
     _clamp,
+    _synchronized_snapshot_params,
     safe_call,
 )
 from custom_components.dess_monitor.device_cache import DeviceCache
@@ -51,9 +52,39 @@ def _make_client(devices=None):
     client.devices.last_data = AsyncMock(return_value={"ld": 1})
     client.devices.energy_flow = AsyncMock(return_value={"ef": 1})
     client.devices.pars = AsyncMock(return_value={"pars": 1})
+    client.devices.fields = AsyncMock(return_value=_fields_response())
+    client.devices.historical_data = AsyncMock(return_value=_history_response())
     client.control.get_fields = AsyncMock(return_value={"field": [{"id": "x"}]})
     client.control.get_value = AsyncMock(return_value={"val": "SBU"})
     return client
+
+
+def _history_response(*, realtime=True):
+    """Minimal devcode 6515 history payload from a Powland iSolar SMG III."""
+    return {
+        "title": [
+            {"title": "Timestamp"},
+            {"title": "INV Module Termperature", "unit": "°C"},
+            {"title": "DC Module Termperature", "unit": "°C"},
+            {"title": "Grid Voltage", "unit": "V"},
+            {"title": "PV1 Power", "unit": "W"},
+        ],
+        "row": [
+            {
+                "realtime": realtime,
+                "field": ["2026-11-13 13:31:06", "44", "32", "0.0", "944"],
+            }
+        ],
+    }
+
+
+def _fields_response():
+    return [
+        {"id": "eybond_read_22", "name": "INV Module Termperature"},
+        {"id": "eybond_read_28", "name": "DC Module Termperature"},
+        {"id": "eybond_read_33", "name": "Grid Voltage"},
+        {"id": "eybond_read_45", "name": "PV1 Power"},
+    ]
 
 
 def _make_entry(hass, *, data=None, options=None):
@@ -165,6 +196,68 @@ class TestClamp:
 
     def test_none_returns_low(self):
         assert _clamp(None, 30, 900) == 30
+
+
+# --------------------------------------------------------------------------- #
+# Powland iSolar SMG III synchronized snapshot parsing
+# --------------------------------------------------------------------------- #
+
+class TestSynchronizedSnapshotParams:
+    def test_extracts_dynamic_metrics_with_provider_ids_and_timestamp(self):
+        assert _synchronized_snapshot_params(_history_response(), _fields_response()) == {
+            "parameter": [
+                {
+                    "id": "eybond_read_22",
+                    "par": "INV Module Termperature",
+                    "val": "44",
+                    "unit": "°C",
+                },
+                {
+                    "id": "eybond_read_28",
+                    "par": "DC Module Termperature",
+                    "val": "32",
+                    "unit": "°C",
+                },
+                {
+                    "id": "eybond_read_33",
+                    "par": "Grid Voltage",
+                    "val": "0.0",
+                    "unit": "V",
+                },
+                {
+                    "id": "eybond_read_45",
+                    "par": "PV1 Power",
+                    "val": "944",
+                    "unit": "W",
+                },
+            ],
+            "gts": "2026-11-13 13:31:06",
+        }
+
+    def test_prefers_realtime_row(self):
+        history = _history_response(realtime=False)
+        history["row"].insert(
+            0,
+            {
+                "realtime": False,
+                "field": ["old", "40", "30", "229", "800"],
+            },
+        )
+        history["row"].append(
+            {
+                "realtime": True,
+                "field": ["now", "45", "33", "230", "900"],
+            },
+        )
+        snapshot = _synchronized_snapshot_params(history, _fields_response())
+        assert snapshot["gts"] == "now"
+        assert [param["val"] for param in snapshot["parameter"]] == [
+            "45", "33", "230", "900"
+        ]
+
+    @pytest.mark.parametrize("history", [{}, {"title": [], "row": []}, {"title": [], "row": [{}]}])
+    def test_malformed_or_empty_payload_returns_empty(self, history):
+        assert _synchronized_snapshot_params(history, _fields_response()) == {}
 
 
 # --------------------------------------------------------------------------- #
@@ -285,6 +378,36 @@ class TestGetParsCached:
 
 
 # --------------------------------------------------------------------------- #
+# _get_synchronized_snapshot_cached
+# --------------------------------------------------------------------------- #
+
+class TestGetSynchronizedSnapshotCached:
+    async def test_first_call_fetches_fields_and_history_then_uses_cache(self, hass):
+        coord, _, client, _ = _make_coordinator(hass)
+        identity = coord_mod.DeviceIdentity.from_dict(_device(devcode=6515))
+
+        first = await coord._get_synchronized_snapshot_cached("PN1", identity)
+        second = await coord._get_synchronized_snapshot_cached("PN1", identity)
+
+        assert first == second
+        assert first["gts"] == "2026-11-13 13:31:06"
+        assert first["parameter"][0]["id"] == "eybond_read_22"
+        client.devices.fields.assert_awaited_once_with(identity)
+        client.devices.historical_data.assert_awaited_once_with(
+            identity, ANY, page=0, pagesize=1
+        )
+
+    async def test_stale_value_survives_transient_failure(self, hass):
+        coord, _, client, _ = _make_coordinator(hass)
+        identity = coord_mod.DeviceIdentity.from_dict(_device(devcode=6515))
+        first = await coord._get_synchronized_snapshot_cached("PN1", identity)
+        coord._synchronized_snapshot_fetched_at["PN1"] = 0
+        client.devices.historical_data = AsyncMock(side_effect=TransportError("down"))
+
+        assert await coord._get_synchronized_snapshot_cached("PN1", identity) == first
+        assert client.devices.fields.await_count == 1
+
+# --------------------------------------------------------------------------- #
 # _async_update_data
 # --------------------------------------------------------------------------- #
 
@@ -305,6 +428,25 @@ class TestAsyncUpdateData:
         assert entry["ctrl_fields"] == [{"id": "x"}]
         # devcode 2376 -> output priority resolver returns None without a call.
         assert entry["device_extra"] == {"output_priority": None}
+        client.devices.historical_data.assert_not_awaited()
+        client.devices.fields.assert_not_awaited()
+
+    async def test_devcode_6515_prioritizes_synchronized_snapshot(self, hass):
+        coord, _, client, _ = _make_coordinator(hass, devices=[_device(devcode=6515)])
+        data = await coord._async_update_data()
+
+        entry = data["PN1"]
+        assert next(iter(entry)) == "synchronized_snapshot"
+        snapshot = entry["synchronized_snapshot"]
+        assert snapshot["gts"] == "2026-11-13 13:31:06"
+        assert [param["id"] for param in snapshot["parameter"]] == [
+            "eybond_read_22",
+            "eybond_read_28",
+            "eybond_read_33",
+            "eybond_read_45",
+        ]
+        client.devices.historical_data.assert_awaited_once()
+        client.devices.fields.assert_awaited_once()
 
     async def test_stale_live_data_reused(self, hass):
         coord, _, client, _ = _make_coordinator(hass)
