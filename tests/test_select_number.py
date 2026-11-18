@@ -139,6 +139,7 @@ class TestOutputPrioritySelect:
         s = InverterOutputPrioritySelect(item, coord)
         assert s._attr_options == ["Utility", "Solar", "SBU", "SUB"]
         assert s._attr_unique_id == "PN1_output_priority"
+        assert s.device_info["model_id"] == "1"
 
     def test_initial_option_from_coordinator(self):
         item = _make_item()

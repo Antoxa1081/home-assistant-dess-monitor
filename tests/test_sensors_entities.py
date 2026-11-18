@@ -214,6 +214,7 @@ class TestValueResolvingSensors:
         assert info["identifiers"] == {(DOMAIN, "PN1")}
         assert info["model"] == "PN1"
         assert info["serial_number"] == "SN1"
+        assert info["model_id"] == "1"
         assert info["manufacturer"] == "ESS"
 
     def test_available_reflects_online(self):
@@ -464,6 +465,7 @@ class TestDirectSensors:
         info = s.device_info
         from custom_components.dess_monitor.const import DOMAIN
         assert info["identifiers"] == {(DOMAIN, "PN1")}
+        assert info["model_id"] == "1"
         assert info["manufacturer"] == "ESS"
 
 
