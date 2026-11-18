@@ -204,18 +204,19 @@ class MappingDiscovery:
         if cand.value_map is not None:
             raw_str = raw_val if isinstance(raw_val, str) else str(raw_val)
             return cand.value_map.get(raw_str.lower())
-        unit = item.get("unit")
-        if cand.unit_hint is not None and isinstance(unit, str) and unit:
+        raw_unit = item.get("unit")
+        unit = raw_unit.strip().lower() if isinstance(raw_unit, str) else ""
+        if cand.unit_hint is not None and unit:
             # Generic keys like ``eybond_read_46`` mean different things on
             # different firmwares; the unit guards against pinning a
             # same-named field of another quantity. kW is W after scaling.
-            normalised = "W" if unit == "kW" else unit
-            if normalised.lower() != cand.unit_hint.lower():
+            normalised = "w" if unit == "kw" else unit
+            if normalised != cand.unit_hint.lower():
                 return None
         val = safe_float(raw_val, default=None)
         if val is None:
             return None
-        if isinstance(unit, str) and unit == "kW":
+        if unit == "kw":
             val *= 1000.0
         val = val * cand.scale + cand.offset
         if cand.sign == SIGN_POSITIVE:
