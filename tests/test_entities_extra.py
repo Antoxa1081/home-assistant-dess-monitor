@@ -23,7 +23,9 @@ from custom_components.dess_monitor import number as number_mod
 from custom_components.dess_monitor import select as select_mod
 from custom_components.dess_monitor import sensor as sensor_mod
 from custom_components.dess_monitor.const import (
+    CONF_DIRECT_PROTOCOL,
     DEFAULT_BATTERY_CHEMISTRY,
+    DIRECT_PROTOCOL_SMG2,
 )
 from custom_components.dess_monitor.number import (
     InverterDynamicSettingNumber,
@@ -115,9 +117,11 @@ class TestRescaleEdges:
 
 # --- select.async_setup_entry -----------------------------------------------
 
-def _make_hub(items, data, options):
+def _make_hub(items, data, options, direct_data=None):
     coordinator = _make_coordinator(data=data, options=options)
-    hub = SimpleNamespace(items=items, coordinator=coordinator, online=True)
+    hub = SimpleNamespace(
+        items=items, coordinator=coordinator, direct_coordinator=SimpleNamespace(data=direct_data), online=True,
+    )
     return hub, coordinator
 
 
@@ -199,6 +203,38 @@ class TestNumberSetupEntry:
             await number_mod.async_setup_entry(MagicMock(), config_entry, lambda d: added.extend(list(d)))
         names = [type(e).__name__ for e in added]
         assert names.count("InverterDynamicSettingNumber") == 1
+
+    @pytest.mark.parametrize(
+        "cloud_rated, direct_rated, battery_voltage, protocol, expected",
+        [
+            (None, "48.0", None, "axpert", [(50.0, 60.0), (42.0, 48.0)]),
+            (None, None, 53.2, "axpert", [(50.0, 60.0), (42.0, 48.0)]),
+            (24.0, "48.0", 53.2, "axpert", [(25.0, 30.0), (21.0, 24.0)]),
+            (None, None, 42.0, "axpert", [(25.0, 30.0), (21.0, 24.0)]),
+            (None, "24.0", 53.2, DIRECT_PROTOCOL_SMG2, [(50.0, 60.0), (42.0, 48.0)]),
+        ],
+    )
+    async def test_setup_uses_battery_voltage_for_undersized_setting_ranges(
+        self, cloud_rated, direct_rated, battery_voltage, protocol, expected,
+    ):
+        item = _make_item(resolve_map={
+            "sy_rated_battery_voltage": cloud_rated,
+            "battery_voltage": battery_voltage,
+        })
+        fields = [
+            {"id": "bat_charging_bulk_voltage", "name": "Bulk", "hint": "25.0~30.0", "unit": "V"},
+            {"id": "bat_battery_cut_off_voltage", "name": "Cut-off", "hint": "21.0~24.0V"},
+        ]
+        options = {"dynamic_settings": True, "battery_virtual_enabled": False, CONF_DIRECT_PROTOCOL: protocol}
+        direct_data = {"PN1": {"qpiri": {"rated_battery_voltage": direct_rated}}} if direct_rated else None
+        hub, _ = _make_hub([item], {"PN1": {"ctrl_fields": fields}}, options, direct_data)
+        config_entry = SimpleNamespace(runtime_data=hub, options=options)
+        added = []
+
+        await number_mod.async_setup_entry(MagicMock(), config_entry, added.extend)
+
+        assert [(entity.native_min_value, entity.native_max_value) for entity in added] == expected
+        assert all(entity.device_info["model_id"] == "1" for entity in added)
 
     async def test_setup_rated_voltage_resolver_raises_is_swallowed(self):
         item = _make_item()

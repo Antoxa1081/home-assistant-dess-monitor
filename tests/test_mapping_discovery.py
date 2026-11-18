@@ -103,10 +103,18 @@ class TestResolveDiscovery:
 
 
 class TestExtraction:
-    def test_kw_unit_scales_to_watts(self):
+    @pytest.mark.parametrize("unit", ["kW", "kw"])
+    def test_kw_unit_scales_to_watts(self, unit):
         d = disc()
-        data = {"last_data": {"pars": [id_item("battery_active_power", "1.5", unit="kW")]}}
+        data = {"last_data": {"pars": [id_item("battery_active_power", "1.5", unit=unit)]}}
         assert d.resolve(PN, "battery_power", data) == pytest.approx(1500.0)
+
+    @pytest.mark.parametrize("value, charge, discharge", [("0.5580", 558, 0), ("-0.5580", 0, 558)])
+    def test_lowercase_kw_from_energy_flow_scales_both_battery_power_legs(self, value, charge, discharge):
+        d = disc()
+        data = {"energy_flow": {"bt_status": [par_item("battery_active_power", value, unit="kw", status=1)]}}
+        assert d.resolve(PN, "battery_charging_power", data) == pytest.approx(charge)
+        assert d.resolve(PN, "battery_discharge_power", data) == pytest.approx(discharge)
 
     def test_w_unit_unchanged(self):
         d = disc()
@@ -451,10 +459,11 @@ class TestUnitHint:
         data = {"pars": {"parameter": [par_item("eybond_read_46", "12", unit="A")]}}
         assert disc().resolve(PN, "probe", data) is None
 
-    def test_kw_counts_as_w(self, monkeypatch):
+    @pytest.mark.parametrize("unit", ["kW", "kw"])
+    def test_kw_counts_as_w(self, monkeypatch, unit):
         self._with_candidate(monkeypatch, ProviderKeyCandidate(
             "eybond_read_48", MATCH_FIELD_PAR, unit_hint="W"))
-        data = {"pars": {"parameter": [par_item("eybond_read_48", "0.514", unit="kW")]}}
+        data = {"pars": {"parameter": [par_item("eybond_read_48", "0.514", unit=unit)]}}
         assert disc().resolve(PN, "probe", data) == pytest.approx(514.0)
 
     def test_missing_unit_accepted(self, monkeypatch):

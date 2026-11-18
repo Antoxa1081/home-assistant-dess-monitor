@@ -2,6 +2,7 @@ import logging
 import random
 import re
 from datetime import datetime, timedelta
+from math import isfinite
 
 import async_timeout
 from homeassistant.components.number import (
@@ -26,14 +27,20 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.dess_monitor import HubConfigEntry, MainCoordinator
-from custom_components.dess_monitor.api.resolvers.data_resolvers import resolve_sy_rated_battery_voltage
+from custom_components.dess_monitor.api.helpers import safe_float
+from custom_components.dess_monitor.api.resolvers.data_resolvers import (
+    resolve_battery_voltage,
+    resolve_sy_rated_battery_voltage,
+)
 from custom_components.dess_monitor.const import (
     CONF_BATTERY_VIRTUAL_ENABLED,
+    CONF_DIRECT_PROTOCOL,
     CONF_DYNAMIC_SETTINGS_INTERVAL,
     DEFAULT_BATTERY_CAPACITY_AH,
     DEFAULT_BATTERY_VIRTUAL_ENABLED,
     DEFAULT_BATTERY_VOLTAGE_FULL,
     DEFAULT_DYNAMIC_SETTINGS_INTERVAL,
+    DIRECT_PROTOCOL_SMG2,
     DOMAIN,
     DYNAMIC_SETTINGS_API_TIMEOUT,
     MAX_BATTERY_CAPACITY_AH,
@@ -167,6 +174,32 @@ def _format_param_value(value: float, step: float | None) -> str:
 _NOMINAL_BATTERY_VOLTAGES: tuple[float, ...] = (12.0, 24.0, 36.0, 48.0)
 
 
+def _resolve_rated_battery_voltage(
+        device_data: dict, inverter_device: InverterDevice, direct_rated_voltage: object,
+) -> float | None:
+    """Use an explicit rating or infer the bank only from an unambiguous reading."""
+    try:
+        cloud_rating = safe_float(resolve_sy_rated_battery_voltage(device_data, inverter_device), default=None)
+    except Exception:  # noqa: BLE001 — an incomplete cloud snapshot can fail to resolve
+        cloud_rating = None
+    if cloud_rating is not None and isfinite(cloud_rating) and cloud_rating > 0:
+        return cloud_rating
+
+    direct_rating = safe_float(direct_rated_voltage, default=None)
+    if direct_rating is not None and isfinite(direct_rating) and direct_rating > 0:
+        return direct_rating
+
+    try:
+        measured = safe_float(resolve_battery_voltage(device_data, inverter_device), default=None)
+    except Exception:  # noqa: BLE001 — range hints still work without telemetry
+        return None
+    if measured is None:
+        return None
+    # Adjacent nominal systems can overlap at the ends of their operating ranges.
+    plausible = [voltage for voltage in _NOMINAL_BATTERY_VOLTAGES if 0.875 * voltage <= measured <= 1.3 * voltage]
+    return plausible[0] if len(plausible) == 1 else None
+
+
 def _rescale_voltage_hint(
         lo: float, hi: float, rated_battery_voltage: float | None,
 ) -> tuple[float, float]:
@@ -221,31 +254,29 @@ async def async_setup_entry(
         if virtual_battery_numbers:
             async_add_entities(virtual_battery_numbers)
 
-    new_devices = []
+    if config_entry.options.get('dynamic_settings', False) is not True:
+        return
+
+    # The SMG-II codec currently supplies a fixed placeholder for this field.
+    direct_data = {} if config_entry.options.get(CONF_DIRECT_PROTOCOL) == DIRECT_PROTOCOL_SMG2 else (
+        hub.direct_coordinator.data or {}
+    )
+    setting_numbers = []
     for item in hub.items:
-        # grid sensors
         if coordinator_data is None or item.inverter_id not in coordinator_data:
             continue
         device_data = coordinator_data[item.inverter_id]
         fields = device_data['ctrl_fields']
         if fields is None:
             continue
-        if config_entry.options.get('dynamic_settings', False) is True:
-            try:
-                rated_v = resolve_sy_rated_battery_voltage(device_data, item)
-            except Exception:  # noqa: BLE001 — resolver may raise if pars not yet seeded
-                rated_v = None
-            async_add_entities(list(
-                map(
-                    lambda field_data: InverterDynamicSettingNumber(
-                        item, coordinator, field_data, rated_v,
-                    ),
-                    filter(lambda field: 'item' not in field, fields)
-                )
-            )
-            )
-    if new_devices:
-        async_add_entities(new_devices)
+        direct_rating = direct_data.get(item.inverter_id, {}).get('qpiri', {}).get('rated_battery_voltage')
+        rated_v = _resolve_rated_battery_voltage(device_data, item, direct_rating)
+        setting_numbers.extend(
+            InverterDynamicSettingNumber(item, coordinator, field, rated_v)
+            for field in fields if 'item' not in field
+        )
+    if setting_numbers:
+        async_add_entities(setting_numbers)
 
 
 class NumberBase(CoordinatorEntity, NumberEntity):
@@ -271,7 +302,7 @@ class NumberBase(CoordinatorEntity, NumberEntity):
             "model": self._inverter_device.device_data['pn'],
             "serial_number": self._inverter_device.device_data['sn'],
             "hw_version": str(self._inverter_device.device_data['devcode']),
-            "model_id": self._inverter_device.device_data['devaddr'],
+            "model_id": str(self._inverter_device.device_data['devaddr']),
             "manufacturer": 'ESS'
         }
 
@@ -341,10 +372,10 @@ class InverterDynamicSettingNumber(NumberBase, RestoreNumber):
                 parsed = parsed_from_unit
                 unit_was_used_as_hint = True
 
-        if unit_was_used_as_hint:
-            # Every observed multi-range hint has been a battery-voltage one;
-            # treat the field as voltage so HA renders a sensible unit/icon
-            # instead of the raw range string.
+        if unit_was_used_as_hint or (
+            parsed is not None and not raw_unit and raw_hint.strip().lower().endswith('v')
+        ):
+            # The control field can include its voltage unit in the range.
             unit, device_class = UnitOfElectricPotential.VOLT, NumberDeviceClass.VOLTAGE
         else:
             unit, device_class = _resolve_unit(raw_unit)
